@@ -22,7 +22,14 @@ The following packages were verified via `colcon build --packages-select indoor_
 
 ## Current Gap
 
-The current gap is the missing structured ROS 2 → depth/costmap → Nav2 integration chain and Gazebo command velocity handoff.
+The current verified bridge contract is now implemented as:
+
+- `/smartphone/depth` from `smartphone_depth_bridge`
+- `/depth_occupancy_grid` from the depth-to-occupancy conversion node
+- `/scan` from the depth-to-scan conversion node
+- `/cmd_vel` from the Nav2 controller chain into Gazebo
+
+The previous mismatch that pulled from `/camera/depth/image_raw` was corrected in the existing node sources to the real source topic.
 
 ## Next Task
 

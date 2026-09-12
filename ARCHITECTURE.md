@@ -26,7 +26,15 @@ The current architecture is organized as a staged pipeline:
 
 ## Pending Integration
 
-The architecture should move from these verified component packages to one consistent ROS 2 launch and Nav2 navigation stack.
+The architecture now aligns the existing verified package components around a single trusted topic contract:
+
+- Bridge publishes `/smartphone/depth` from the FastAPI depth PNG endpoint.
+- `depth_to_occupancy_grid` consumes `/smartphone/depth` and publishes `/depth_occupancy_grid`.
+- `depth_to_scan` consumes `/smartphone/depth` and publishes `/scan`.
+- `depth_to_pointcloud` consumes `/smartphone/depth` for a point-cloud view.
+- `depth_obstacle_node` now consumes `/smartphone/depth` and publishes no longer directly to the robot.
+
+The new `fyp_bringup.launch.py` file provides a single integrated Gazebo + depth bridge + occupancy and scan node + Nav2 control chain.
 
 ## Next Task
 

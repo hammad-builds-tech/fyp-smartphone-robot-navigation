@@ -30,8 +30,15 @@ The workspace has a verified implementation structure in four major layers:
 
 ## Current Limitations
 
-- The stack is not yet integrated into a single ROS 2 launch and Nav2 bring-up chain.
-- The backend URL in the ROS depth bridge is a private network endpoint and must remain out of the public repository.
+- The stack is now aligned to a single ROS 2 topic contract using `/smartphone/depth` for the bridge and all current depth-facing subscribers.
+- The backend URL in the ROS depth bridge is now represented via the `FYP_BACKEND_URL` environment variable defaulting to a local loopback address and must remain out of the public repository.
+
+## Integration Contract
+
+- Smartphone depth image: `/smartphone/depth`
+- Occupancy grid: `/depth_occupancy_grid`
+- Scan topic: `/scan`
+- Gazebo command velocity: `/cmd_vel`
 
 ## Next Task
 

@@ -1,0 +1,90 @@
+from launch import LaunchDescription
+from launch.actions import ExecuteProcess, TimerAction
+from launch_ros.actions import Node
+from pathlib import Path
+import os
+
+
+def generate_launch_description():
+    pkg_dir = Path(__file__).resolve().parent.parent
+    world = pkg_dir / "worlds" / "indoor_world.sdf"
+    robot = pkg_dir / "models" / "fyp_robot" / "fyp_robot.sdf"
+
+    backend_url = os.environ.get("FYP_BACKEND_URL", "http://127.0.0.1:8000/latest-depth-image")
+    params_file = "/home/hammad/FYP/ros2_ws/src/indoor_nav_costmap/config/nav2_params.yaml"
+
+    gazebo = ExecuteProcess(
+        cmd=["gz", "sim", "-r", str(world)],
+        output="screen"
+    )
+
+    bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
+            "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
+            "/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
+            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
+        ],
+        output="screen"
+    )
+
+    spawn_robot = Node(
+        package="ros_gz_sim",
+        executable="create",
+        arguments=[
+            "-name", "fyp_robot",
+            "-file", str(robot),
+            "-x", "0",
+            "-y", "0",
+            "-z", "0.35"
+        ],
+        output="screen"
+    )
+
+    depth_bridge = Node(
+        package="smartphone_depth_bridge",
+        executable="depth_bridge_node",
+        output="screen",
+        parameters=[{
+            "backend_url": backend_url,
+        }],
+    )
+
+    depth_to_occupancy_grid = Node(
+        package="indoor_nav_costmap",
+        executable="depth_to_occupancy_grid",
+        output="screen"
+    )
+
+    depth_to_scan = Node(
+        package="indoor_nav_costmap",
+        executable="depth_to_scan",
+        output="screen"
+    )
+
+    nav2 = ExecuteProcess(
+        cmd=[
+            "ros2", "launch", "nav2_bringup", "navigation_launch.py",
+            "use_sim_time:=true",
+            "params_file:=/home/hammad/FYP/ros2_ws/src/indoor_nav_costmap/config/nav2_params.yaml",
+        ],
+        output="screen",
+    )
+
+    return LaunchDescription([
+        gazebo,
+        bridge,
+        depth_bridge,
+        depth_to_occupancy_grid,
+        depth_to_scan,
+        TimerAction(
+            period=3.0,
+            actions=[spawn_robot]
+        ),
+        TimerAction(
+            period=5.0,
+            actions=[nav2]
+        ),
+    ])

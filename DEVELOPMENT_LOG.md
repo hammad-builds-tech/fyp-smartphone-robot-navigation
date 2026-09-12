@@ -18,4 +18,10 @@ This document records the verified state from the current workspace before start
 
 ## Planned Future Work
 
-The verified baseline is ready for the next implementation milestone: ROS2 → costmap → Nav2 → Gazebo integration.
+The verified baseline is now updated with an integrated launch path and a single topic contract for the ROS2 → costmap → Nav2 → Gazebo integration milestone.
+
+## Verification
+
+- Existing topic contract corrected: `/smartphone/depth` is the source topic for depth conversion nodes.
+- Backend URL in the depth bridge is configured via the `backend_url` ROS parameter and the `FYP_BACKEND_URL` environment variable default.
+- `colcon build --packages-select indoor_nav_costmap smartphone_depth_bridge indoor_nav_gazebo` verified the package build after the selected source adjustments.
