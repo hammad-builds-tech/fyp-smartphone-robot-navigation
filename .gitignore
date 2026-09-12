@@ -1,0 +1,75 @@
+# =============================================================
+# FYP GitHub baseline ignore rules
+# =============================================================
+
+# Preserve the upstream nested repositories as external sources.
+MiDaS/
+nav2_src/
+
+# ROS/Colcon build and environment artifacts.
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+ros2_ws/.colcon_install_layout
+ros2_ws/.colcon_workspace
+
+build/
+install/
+log/
+*.egg-info/
+__pycache__/
+*.py[cod]
+*.so
+
+# Local Python virtual environments.
+.venv/
+venv/
+env/
+
+# Generated project data and model artifacts.
+backend/uploads/
+backend/depth/output/
+backend/depth/output/*
+backend/depth/output/**
+
+checkpoints/
+models/
+weights/
+*.pt
+*.pth
+*.bin
+*.onnx
+*.ckpt
+*.h5
+
+# Reconstructed/generated datasets and outputs.
+data/
+dense/
+colmap_video/
+video_frames/
+sparse/
+sparse_txt/
+database/
+output/
+
+# Local logs, caches and editor metadata.
+.DS_Store
+.vscode/
+.idea/
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Private and local configuration.
+.env
+.env.*
+*.local
+*.secret
+secrets/
+credentials/
+
+# Keep documentation and source files in the new repo.
+# All local generated artifacts should be recreated by setup steps.
