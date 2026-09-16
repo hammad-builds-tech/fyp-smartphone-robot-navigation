@@ -3,6 +3,9 @@ from fastapi.responses import JSONResponse
 import cv2
 import numpy as np
 from pathlib import Path
+import asyncio
+import threading
+from typing import Optional
 
 from backend.depth.midas_processor import MiDaSProcessor
 
@@ -20,9 +23,12 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DEPTH_DIR.mkdir(parents=True, exist_ok=True)
 
 
-latest_frame = None
-latest_depth = None
+latest_frame: Optional[np.ndarray] = None
+latest_depth: Optional[np.ndarray] = None
 frame_count = 0
+pending_frame: Optional[np.ndarray] = None
+processing_lock = threading.Lock()
+inference_active = False
 
 
 # =========================
@@ -34,6 +40,55 @@ print("Initializing MiDaS...")
 midas = MiDaSProcessor()
 
 print("MiDaS ready.")
+
+
+# =========================
+# Background Inference Worker
+# =========================
+
+def inference_worker():
+    """Background thread that processes frames from the buffer."""
+    global latest_depth, pending_frame, inference_active
+    
+    while True:
+        frame_to_process = None
+        
+        with processing_lock:
+            if pending_frame is not None:
+                frame_to_process = pending_frame
+                pending_frame = None
+                inference_active = True
+        
+        if frame_to_process is not None:
+            # Run MiDaS inference (blocks this background thread only)
+            depth = midas.predict(frame_to_process)
+            
+            # Save latest depth
+            with processing_lock:
+                latest_depth = depth
+                inference_active = False
+            
+            # Save latest depth as normalized PNG
+            depth_normalized = cv2.normalize(
+                depth,
+                None,
+                0,
+                255,
+                cv2.NORM_MINMAX
+            ).astype(np.uint8)
+
+            cv2.imwrite(
+                str(DEPTH_DIR / "latest_depth.png"),
+                depth_normalized
+            )
+        else:
+            # No frame to process, sleep briefly
+            threading.Event().wait(0.05)
+
+
+# Start background inference thread
+inference_thread = threading.Thread(target=inference_worker, daemon=True)
+inference_thread.start()
 
 
 # =========================
@@ -55,10 +110,14 @@ def root():
 
 @app.get("/health")
 def health():
+    with processing_lock:
+        active = inference_active
+    
     return {
         "status": "ok",
         "frames_received": frame_count,
-        "midas": "loaded"
+        "midas": "loaded",
+        "inference_active": active
     }
 
 
@@ -70,8 +129,8 @@ def health():
 async def video_websocket(websocket: WebSocket):
 
     global latest_frame
-    global latest_depth
     global frame_count
+    global pending_frame
 
     await websocket.accept()
 
@@ -107,13 +166,10 @@ async def video_websocket(websocket: WebSocket):
 
             latest_frame = frame
 
-            # =========================
-            # MiDaS DEPTH
-            # =========================
-
-            depth = midas.predict(frame)
-
-            latest_depth = depth
+            # Submit frame for background processing (non-blocking)
+            # Only keep the latest frame - drop old ones
+            with processing_lock:
+                pending_frame = frame.copy()
 
             # Save every 10th RGB frame
             if frame_count % 10 == 0:
@@ -128,26 +184,16 @@ async def video_websocket(websocket: WebSocket):
                     frame
                 )
 
-            # Save latest depth as normalized PNG
-            depth_normalized = cv2.normalize(
-                depth,
-                None,
-                0,
-                255,
-                cv2.NORM_MINMAX
-            ).astype(np.uint8)
-
-            cv2.imwrite(
-                str(DEPTH_DIR / "latest_depth.png"),
-                depth_normalized
-            )
+            # Get current depth status
+            with processing_lock:
+                depth_available = latest_depth is not None
+                active = inference_active
 
             print(
                 f"Frame {frame_count} | "
                 f"RGB {frame.shape[1]}x{frame.shape[0]} | "
-                f"Depth {depth.shape} | "
-                f"Min {depth.min():.3f} | "
-                f"Max {depth.max():.3f}"
+                f"Depth {'available' if depth_available else 'processing...'} | "
+                f"Inference {'active' if active else 'idle'}"
             )
 
             await websocket.send_json({
@@ -160,13 +206,9 @@ async def video_websocket(websocket: WebSocket):
 
                 "height": frame.shape[0],
 
-                "depth_width": depth.shape[1],
+                "depth_available": depth_available,
 
-                "depth_height": depth.shape[0],
-
-                "depth_min": float(depth.min()),
-
-                "depth_max": float(depth.max())
+                "inference_active": active
 
             })
 
@@ -236,6 +278,8 @@ def get_latest_depth():
         )
 
     }
+
+
 @app.get("/latest-depth-image")
 def get_latest_depth_image():
 
@@ -260,4 +304,3 @@ def get_latest_depth_image():
             "X-FYP-Depth-Sequence": str(frame_count),
         },
     )
-   
