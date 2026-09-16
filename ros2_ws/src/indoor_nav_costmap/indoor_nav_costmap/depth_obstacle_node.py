@@ -12,32 +12,28 @@ class DepthObstacleNode(Node):
         super().__init__("depth_obstacle_node")
 
         self.bridge = CvBridge()
+        self.obstacle_depth = None
 
         self.depth_sub = self.create_subscription(
             Image,
             "/smartphone/depth",
             self.depth_callback,
-            10
+            10,
         )
 
         self.cmd_pub = self.create_publisher(
             Twist,
             "/cmd_vel",
-            10
+            10,
         )
-
-        self.obstacle_depth = None
 
         self.timer = self.create_timer(
             0.2,
-            self.control_robot
+            self.control_robot,
         )
 
         self.get_logger().info(
-            "Depth Obstacle Avoidance Node started"
-        )
-        self.get_logger().info(
-            "Listening: /smartphone/depth"
+            "Depth obstacle safety node started"
         )
 
     def depth_callback(self, msg):
@@ -45,29 +41,26 @@ class DepthObstacleNode(Node):
         try:
             depth = self.bridge.imgmsg_to_cv2(
                 msg,
-                desired_encoding="mono8"
+                desired_encoding="mono8",
             )
 
             depth = np.asarray(
                 depth,
-                dtype=np.float32
+                dtype=np.float32,
             )
 
             h, w = depth.shape
 
-            # Central area directly in front
             y1 = int(h * 0.30)
-            y2 = int(h * 0.70)
+            y2 = int(h * 0.75)
             x1 = int(w * 0.30)
             x2 = int(w * 0.70)
 
             center = depth[y1:y2, x1:x2]
 
-            valid = center[
-                np.isfinite(center)
-            ]
+            valid = center[np.isfinite(center)]
 
-            if valid.size > 0:
+            if valid.size:
                 self.obstacle_depth = float(
                     np.percentile(valid, 10)
                 )
@@ -79,41 +72,22 @@ class DepthObstacleNode(Node):
 
     def control_robot(self):
 
-        cmd = Twist()
-
+        # Safety node only.
+        # Do not fight Nav2 by publishing normal driving commands.
         if self.obstacle_depth is None:
-            self.cmd_pub.publish(cmd)
             return
 
-        depth_value = self.obstacle_depth
+        if self.obstacle_depth < 45:
 
-        # MiDaS depth is relative/normalized.
-        # Higher value = farther, lower value = closer.
-        if depth_value > 170:
-
-            # Far obstacle / open space
-            cmd.linear.x = 0.15
-            cmd.angular.z = 0.0
-
-        elif depth_value > 90:
-
-            # Medium distance
-            cmd.linear.x = 0.08
-            cmd.angular.z = 0.0
-
-        else:
-
-            # Close obstacle
+            cmd = Twist()
             cmd.linear.x = 0.0
-            cmd.angular.z = 0.5
+            cmd.angular.z = 0.0
 
-        self.cmd_pub.publish(cmd)
+            self.cmd_pub.publish(cmd)
 
-        self.get_logger().info(
-            f"Depth: {depth_value:.1f} | "
-            f"Linear: {cmd.linear.x:.2f} | "
-            f"Angular: {cmd.angular.z:.2f}"
-        )
+            self.get_logger().warning(
+                "Very close depth obstacle: STOP"
+            )
 
 
 def main(args=None):
@@ -124,10 +98,8 @@ def main(args=None):
 
     try:
         rclpy.spin(node)
-
     except KeyboardInterrupt:
         pass
-
     finally:
         node.destroy_node()
         rclpy.shutdown()

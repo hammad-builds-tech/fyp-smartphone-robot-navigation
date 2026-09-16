@@ -1,75 +1,90 @@
-# =============================================================
-# FYP GitHub baseline ignore rules
-# =============================================================
-
-# Preserve the upstream nested repositories as external sources.
-MiDaS/
-nav2_src/
-
-# ROS/Colcon build and environment artifacts.
-ros2_ws/build/
-ros2_ws/install/
-ros2_ws/log/
-ros2_ws/.colcon_install_layout
-ros2_ws/.colcon_workspace
-
+# Build outputs
 build/
 install/
 log/
-*.egg-info/
+*.pyc
 __pycache__/
+*.egg-info/
+
+# ROS
+.catkin_workspace
+devel/
+
+# Python
 *.py[cod]
+*$py.class
 *.so
-
-# Local Python virtual environments.
-.venv/
-venv/
+.Python
 env/
+venv/
 
-# Generated project data and model artifacts.
-backend/uploads/
-backend/depth/output/
-backend/depth/output/*
-backend/depth/output/**
-
-checkpoints/
-models/
-weights/
-*.pt
-*.pth
-*.bin
-*.onnx
-*.ckpt
-*.h5
-
-# Reconstructed/generated datasets and outputs.
-data/
-dense/
-colmap_video/
-video_frames/
-sparse/
-sparse_txt/
-database/
-output/
-
-# Local logs, caches and editor metadata.
-.DS_Store
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Weights and models
+*.pt
+*.pth
+*.onnx
+*.pb
+
+# Data
+*.bag
+*.db
+*.db-shm
+*.db-wal
+uploads/
+output/
+outputs/
+*.pfm
+
+# Media
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.jpeg
+*.png
+*.pgm
+!maps/*.png
+!maps/*.pgm
+
+# Logs
 *.log
-.cache/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.ipynb_checkpoints/
 
-# Private and local configuration.
-.env
-.env.*
-*.local
-*.secret
-secrets/
-credentials/
+# TF frames
+frames_*.gv
+frames_*.pdf
 
-# Keep documentation and source files in the new repo.
-# All local generated artifacts should be recreated by setup steps.
+# Temporary
+*.backup
+*.bak
+*.tmp
+.placeholder
+
+# Android
+*.apk
+*.aab
+*.dex
+.gradle/
+local.properties
+
+# MiDaS upstream
+MiDaS/
+
+# Nav2 source
+nav2_src/
+
+# Reconstruction data
+reconstruction/
+dataset/
+datasets/
+
+# Miscellaneous
+.DS_Store
+android_model/
+images/
+fuse_midas_colmap.py

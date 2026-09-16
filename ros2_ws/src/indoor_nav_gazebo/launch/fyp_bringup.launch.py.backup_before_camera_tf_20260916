@@ -146,7 +146,7 @@ def generate_launch_description():
     )
 
     # --------------------------------------------------------
-    # TF: map -> odom
+    # map -> odom
     #
     # Gazebo provides odom -> base_link.
     # The saved map is used as the global navigation frame.
@@ -165,29 +165,6 @@ def generate_launch_description():
             "--yaw", "0",
             "--frame-id", "map",
             "--child-frame-id", "odom",
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # TF: base_link -> camera_depth_frame
-    #
-    # The smartphone depth sensor is conceptually mounted at the front
-    # of the robot, facing forward. Position it slightly ahead and up.
-    # --------------------------------------------------------
-    camera_tf = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_to_camera_static",
-        arguments=[
-            "--x", "0.3",
-            "--y", "0.0",
-            "--z", "0.2",
-            "--roll", "0",
-            "--pitch", "0",
-            "--yaw", "0",
-            "--frame-id", "base_link",
-            "--child-frame-id", "camera_depth_frame",
         ],
         output="screen",
     )
@@ -266,7 +243,6 @@ def generate_launch_description():
             ),
 
             map_to_odom,
-            camera_tf,
 
             TimerAction(
                 period=5.0,

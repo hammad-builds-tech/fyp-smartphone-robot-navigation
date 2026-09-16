@@ -87,9 +87,6 @@ def generate_launch_description():
         parameters=[
             {
                 "backend_url": backend_url,
-                "depth_topic": "/smartphone/depth",
-                "depth_frame_id": "camera_depth_frame",
-                "use_sim_time": True,
             }
         ],
     )
@@ -101,18 +98,6 @@ def generate_launch_description():
         package="indoor_nav_costmap",
         executable="depth_to_scan",
         output="screen",
-        parameters=[
-            {
-                "depth_topic": "/smartphone/depth",
-                "scan_topic": "/scan",
-                "scan_frame_id": "base_link",
-                "inverse_depth": True,
-                "min_range": 0.15,
-                "obstacle_max_range": 3.0,
-                "clearing_max_range": 3.5,
-                "use_sim_time": True,
-            }
-        ],
     )
 
     # --------------------------------------------------------
@@ -146,7 +131,7 @@ def generate_launch_description():
     )
 
     # --------------------------------------------------------
-    # TF: map -> odom
+    # map -> odom
     #
     # Gazebo provides odom -> base_link.
     # The saved map is used as the global navigation frame.
@@ -157,37 +142,14 @@ def generate_launch_description():
         executable="static_transform_publisher",
         name="map_to_odom_static",
         arguments=[
-            "--x", "0",
-            "--y", "0",
-            "--z", "0",
-            "--roll", "0",
-            "--pitch", "0",
-            "--yaw", "0",
-            "--frame-id", "map",
-            "--child-frame-id", "odom",
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # TF: base_link -> camera_depth_frame
-    #
-    # The smartphone depth sensor is conceptually mounted at the front
-    # of the robot, facing forward. Position it slightly ahead and up.
-    # --------------------------------------------------------
-    camera_tf = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_to_camera_static",
-        arguments=[
-            "--x", "0.3",
-            "--y", "0.0",
-            "--z", "0.2",
-            "--roll", "0",
-            "--pitch", "0",
-            "--yaw", "0",
-            "--frame-id", "base_link",
-            "--child-frame-id", "camera_depth_frame",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "map",
+            "odom",
         ],
         output="screen",
     )
@@ -195,64 +157,23 @@ def generate_launch_description():
     # --------------------------------------------------------
     # Nav2 navigation stack
     #
-    # nav2_bringup's Lyrical navigation_launch always starts optional
-    # navigation servers and replaces lifecycle_manager_navigation.node_names.
-    # Start only the nodes this project uses so the manager below has one,
-    # accurate lifecycle scope. AMCL is deliberately not started because the
-    # project uses the saved indoor map + Gazebo odometry for this simulation.
+    # navigation_launch starts navigation components only.
+    # AMCL is deliberately not started because the project uses
+    # the saved indoor map + Gazebo odometry for this simulation.
     # --------------------------------------------------------
-    controller_server = Node(
-        package="nav2_controller",
-        executable="controller_server",
-        name="controller_server",
-        output="screen",
-        parameters=[params_file],
-        remappings=[("cmd_vel", "/cmd_vel")],
-    )
-
-    planner_server = Node(
-        package="nav2_planner",
-        executable="planner_server",
-        name="planner_server",
-        output="screen",
-        parameters=[params_file],
-    )
-
-    behavior_server = Node(
-        package="nav2_behaviors",
-        executable="behavior_server",
-        name="behavior_server",
-        output="screen",
-        parameters=[params_file],
-        remappings=[("cmd_vel", "/cmd_vel")],
-    )
-
-    bt_navigator = Node(
-        package="nav2_bt_navigator",
-        executable="bt_navigator",
-        name="bt_navigator",
-        output="screen",
-        parameters=[params_file],
-    )
-
-    navigation_manager = Node(
-        package="nav2_lifecycle_manager",
-        executable="lifecycle_manager",
-        name="lifecycle_manager_navigation",
-        output="screen",
-        parameters=[
-            params_file,
-            {
-                "autostart": True,
-                "node_names": [
-                    "controller_server",
-                    "planner_server",
-                    "behavior_server",
-                    "bt_navigator",
-                ],
-                "use_sim_time": True,
-            },
+    nav2 = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "launch",
+            "nav2_bringup",
+            "navigation_launch.py",
+            "use_sim_time:=true",
+            "autostart:=true",
+            "use_composition:=False",
+            "use_respawn:=False",
+            f"params_file:={params_file}",
         ],
+        output="screen",
     )
 
     return LaunchDescription(
@@ -266,10 +187,9 @@ def generate_launch_description():
             ),
 
             map_to_odom,
-            camera_tf,
 
             TimerAction(
-                period=5.0,
+                period=4.0,
                 actions=[
                     depth_bridge,
                     depth_to_scan,
@@ -279,20 +199,8 @@ def generate_launch_description():
             ),
 
             TimerAction(
-                period=15.0,
-                actions=[
-                    controller_server,
-                    planner_server,
-                    behavior_server,
-                    bt_navigator,
-                ],
-            ),
-
-            # Let the four lifecycle nodes create their services before their
-            # manager starts configuring and activating them.
-            TimerAction(
-                period=17.0,
-                actions=[navigation_manager],
+                period=8.0,
+                actions=[nav2],
             ),
         ]
     )
