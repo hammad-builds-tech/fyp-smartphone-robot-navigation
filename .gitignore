@@ -49,8 +49,7 @@ outputs/
 *.jpeg
 *.png
 *.pgm
-!maps/*.png
-!maps/*.pgm
+!ros2_ws/src/indoor_nav_costmap/maps/*.pgm
 
 # Logs
 *.log
@@ -72,14 +71,20 @@ frames_*.pdf
 .gradle/
 local.properties
 
-# MiDaS upstream
-MiDaS/
+# MiDaS upstream sources and weights. The Android app under
+# MiDaS/mobile/android IS tracked (it is our deliverable).
+MiDaS/*
+!MiDaS/mobile/
+MiDaS/mobile/*
+!MiDaS/mobile/android/
+MiDaS/mobile/android/MainActivity_backup.kt
 
 # Nav2 source
 nav2_src/
 
-# Reconstruction data
-reconstruction/
+# Reconstruction data (not the Android package namespace)
+/reconstruction/
+/reconstruction_data/
 dataset/
 datasets/
 

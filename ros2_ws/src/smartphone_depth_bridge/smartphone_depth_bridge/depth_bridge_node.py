@@ -64,6 +64,14 @@ class DepthBridgeNode(Node):
             self._last_offline_log = now
 
     def publish_depth(self):
+        # The bridge must survive any transient backend/decode problem and
+        # keep polling — a single bad response must never kill the node.
+        try:
+            self._publish_depth_once()
+        except Exception as exc:  # noqa: BLE001 - defensive by design
+            self._log_backend_unavailable(f'{type(exc).__name__}: {exc}')
+
+    def _publish_depth_once(self):
         try:
             response = self._session.get(
                 self.backend_url,
@@ -76,6 +84,10 @@ class DepthBridgeNode(Node):
 
         if response.status_code != requests.codes.ok:
             self._log_backend_unavailable(f'HTTP {response.status_code}')
+            return
+
+        if not response.content:
+            self._log_backend_unavailable('empty response body')
             return
 
         content_type = response.headers.get('Content-Type', '')

@@ -25,6 +25,13 @@ class DepthToScan(Node):
         self.declare_parameter("obstacle_max_range", 3.0)
         self.declare_parameter("clearing_max_range", 3.5)
         self.declare_parameter("inverse_depth", True)
+        # MiDaS depth is RELATIVE: the nearest visible surface can only be
+        # placed at some assumed metric distance. near_range_anchor is the
+        # distance assigned to the closest 5th-percentile surface. Anchoring
+        # it at min_range makes every indoor wall a bumper-distance obstacle
+        # (navigation stalls); a moderate anchor stays conservative (reported
+        # ranges are shorter than reality) yet allows forward progress.
+        self.declare_parameter("near_range_anchor", 0.15)
 
         depth_topic = self.get_parameter("depth_topic").value
         scan_topic = self.get_parameter("scan_topic").value
@@ -50,6 +57,9 @@ class DepthToScan(Node):
             self.get_parameter("clearing_max_range").value
         )
         self.inverse_depth = bool(self.get_parameter("inverse_depth").value)
+        self.near_range_anchor = float(
+            self.get_parameter("near_range_anchor").value
+        )
 
         if not (
             0.0 <= self.vertical_roi_top < self.vertical_roi_bottom <= 1.0
@@ -62,6 +72,12 @@ class DepthToScan(Node):
         ):
             raise ValueError(
                 "range limits must satisfy 0 < min < obstacle_max < clearing_max"
+            )
+        if not (
+            self.min_range <= self.near_range_anchor <= self.clearing_max_range
+        ):
+            raise ValueError(
+                "near_range_anchor must lie within [min_range, clearing_max_range]"
             )
 
         self.sub = self.create_subscription(
@@ -91,12 +107,17 @@ class DepthToScan(Node):
         min_range,
         clearing_max_range,
         inverse_depth,
+        near_range_anchor=None,
     ):
         """Convert a MiDaS relative-depth image into conservative scan ranges.
 
         MiDaS returns inverse relative depth: larger values are closer. The
         conversion preserves the nearest value in each output beam so a narrow
         obstacle cannot disappear when the image is downsampled.
+
+        near_range_anchor is the metric distance assigned to the nearest
+        visible surface. It defaults to min_range (legacy behaviour) when not
+        supplied, e.g. by older unit-test callers.
         """
         depth = np.asarray(depth, dtype=np.float32)
         if depth.ndim != 2:
@@ -123,14 +144,26 @@ class DepthToScan(Node):
         if high - low < 1e-6:
             return np.full(beam_count, clearing_max_range, dtype=np.float32)
 
+        # Anchor the nearest visible surface at near_range_anchor instead of
+        # min_range: MiDaS depth is relative, so "closest" has no absolute
+        # metric meaning. Pinning it at min_range makes every wall a
+        # bumper-distance obstacle; a moderate anchor keeps every reported
+        # range an underestimate of the true scene geometry (conservative)
+        # while remaining navigable. The farthest surface maps to
+        # clearing_max_range.
+        nearest = (
+            min_range
+            if near_range_anchor is None
+            else min(max(float(near_range_anchor), min_range), clearing_max_range)
+        )
         normalized = np.clip((column_depth - low) / (high - low), 0.0, 1.0)
         if inverse_depth:
             ranges = clearing_max_range - normalized * (
-                clearing_max_range - min_range
+                clearing_max_range - nearest
             )
         else:
-            ranges = min_range + normalized * (
-                clearing_max_range - min_range
+            ranges = nearest + normalized * (
+                clearing_max_range - nearest
             )
         ranges[~np.isfinite(ranges)] = clearing_max_range
 
@@ -158,6 +191,7 @@ class DepthToScan(Node):
                 self.min_range,
                 self.clearing_max_range,
                 self.inverse_depth,
+                self.near_range_anchor,
             )
             if ranges is None:
                 self.get_logger().warning("Ignoring malformed MiDaS depth image")

@@ -1,5 +1,32 @@
 # Project Status
 
+## 2026-09-20 — End-to-end navigation verified
+
+Full pipeline demonstrated live in one sitting:
+
+- Backend + MiDaS: `/health` OK, frames streamed over `/ws/video`, depth PNG served with
+  `X-FYP-Depth-Sequence` header (atomic in-memory serve, no read/write race).
+- Depth chain: `depth_bridge_node` -> `/smartphone/depth` -> `depth_to_scan` -> `/scan`
+  (~4 Hz, 120 beams, sensor QoS). Bridge survives backend outages (404/empty body ->
+  warn + retry, no crash).
+- Gazebo: robot spawns at (0, -2), stable physics, /odom 50 Hz, /clock flows.
+  **`GZ_IP=127.0.0.1` is now pinned** — with the ethernet interface DOWN, gz transport
+  previously selected it for multicast and silently dropped every gz->ROS message.
+- TF: map -> odom (AMCL, automated initial pose) -> base_link -> camera_depth_frame all resolve.
+- Nav2: all six nodes (controller, planner, bt_navigator, behavior, both costmaps) reach
+  active via the phased bringup; goal accepted, path planned, controller drove the robot,
+  **bt_navigator logged `Goal succeeded`** on a 1.4 m goal (spawn -> (1.4, 0), finished at
+  (2.11, -0.04) by odom).
+- `depth_to_scan` gains `near_range_anchor`: MiDaS depth is relative, so the nearest visible
+  surface is anchored at a configurable distance (2.0 m in sim bringup) instead of hard 0.15 m,
+  which made every wall a bumper-distance obstacle.
+- Known limitation (recorded-scene test harness): the streamed scene is a fixed recording, so
+  depth-derived obstacle marks drift relative to the map as the robot moves and can never be
+  ray-cleared behind the robot; long-range goals eventually enter stale inflated zones and
+  abort ("Failed to make progress"). With a live phone camera the marks correspond to real
+  world obstacles and this loop disappears. Short-range goals in the guaranteed-clear forward
+  zone complete reliably.
+
 ## Current Baseline
 
 Date: 2026-09-12

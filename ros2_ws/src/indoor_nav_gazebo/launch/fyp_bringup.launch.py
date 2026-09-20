@@ -1,298 +1,42 @@
-from launch import LaunchDescription
-from launch.actions import ExecuteProcess, TimerAction
-from launch_ros.actions import Node
+"""One-command bringup (backward compatible).
+
+Includes the three phases in order with generous fixed timers:
+
+    1. simulation.launch.py    — Gazebo + bridge + robot spawn
+    2. localization.launch.py  — depth pipeline + map server + AMCL
+    3. navigation.launch.py    — Nav2 controller/planner/behavior/navigator
+
+Prefer scripts/run_system.sh instead: it starts the same phases as separate
+processes and waits for real readiness gates (odom flowing, map -> odom
+available, /scan streaming from live MiDaS depth) between phases. Fixed
+timers cannot know when the Android phone starts streaming, so this file
+uses conservative delays: without a phone streaming, the navigation phase
+will still fail to activate the global costmap.
+"""
+
 from pathlib import Path
-import os
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription, TimerAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
+
+def _include(launch_file: str) -> IncludeLaunchDescription:
+    return IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(str(launch_file))
+    )
 
 
 def generate_launch_description():
-
-    pkg_dir = Path(__file__).resolve().parent.parent
-
-    world = pkg_dir / "worlds" / "indoor_world.sdf"
-    robot = pkg_dir / "models" / "fyp_robot" / "fyp_robot.sdf"
-
-    backend_url = os.environ.get(
-        "FYP_BACKEND_URL",
-        "http://127.0.0.1:8000/latest-depth-image",
-    )
-
-    params_file = (
-        "/home/hammad/FYP/ros2_ws/src/"
-        "indoor_nav_costmap/config/nav2_params.yaml"
-    )
-
-    map_file = (
-        "/home/hammad/FYP/ros2_ws/src/"
-        "indoor_nav_costmap/maps/indoor_map.yaml"
-    )
-
-    # --------------------------------------------------------
-    # Gazebo
-    # --------------------------------------------------------
-    gazebo = ExecuteProcess(
-        cmd=[
-            "gz",
-            "sim",
-            "-r",
-            "-s",
-            str(world),
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # Gazebo <-> ROS bridge
-    # --------------------------------------------------------
-    bridge = Node(
-        package="ros_gz_bridge",
-        executable="parameter_bridge",
-        arguments=[
-            "/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
-            "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
-            "/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
-            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # Spawn robot
-    # --------------------------------------------------------
-    spawn_robot = Node(
-        package="ros_gz_sim",
-        executable="create",
-        arguments=[
-            "-name",
-            "fyp_robot",
-            "-file",
-            str(robot),
-            "-x",
-            "0",
-            "-y",
-            "0",
-            "-z",
-            "0.35",
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # Smartphone depth -> ROS
-    # --------------------------------------------------------
-    depth_bridge = Node(
-        package="smartphone_depth_bridge",
-        executable="depth_bridge_node",
-        output="screen",
-        parameters=[
-            {
-                "backend_url": backend_url,
-                "depth_topic": "/smartphone/depth",
-                "depth_frame_id": "camera_depth_frame",
-                "use_sim_time": True,
-            }
-        ],
-    )
-
-    # --------------------------------------------------------
-    # MiDaS depth -> pseudo LaserScan
-    # --------------------------------------------------------
-    depth_to_scan = Node(
-        package="indoor_nav_costmap",
-        executable="depth_to_scan",
-        output="screen",
-        parameters=[
-            {
-                "depth_topic": "/smartphone/depth",
-                "scan_topic": "/scan",
-                "scan_frame_id": "base_link",
-                "inverse_depth": True,
-                "min_range": 0.15,
-                "obstacle_max_range": 3.0,
-                "clearing_max_range": 3.5,
-                "use_sim_time": True,
-            }
-        ],
-    )
-
-    # --------------------------------------------------------
-    # Static map -> Nav2
-    # --------------------------------------------------------
-    map_server = Node(
-        package="nav2_map_server",
-        executable="map_server",
-        name="map_server",
-        output="screen",
-        parameters=[
-            {
-                "yaml_filename": map_file,
-                "use_sim_time": True,
-            }
-        ],
-    )
-
-    localization_manager = Node(
-        package="nav2_lifecycle_manager",
-        executable="lifecycle_manager",
-        name="lifecycle_manager_localization",
-        output="screen",
-        parameters=[
-            {
-                "autostart": True,
-                "node_names": ["map_server"],
-                "use_sim_time": True,
-            }
-        ],
-    )
-
-    # --------------------------------------------------------
-    # TF: map -> odom
-    #
-    # Gazebo provides odom -> base_link.
-    # The saved map is used as the global navigation frame.
-    # For this simulation demo, keep map and odom aligned.
-    # --------------------------------------------------------
-    map_to_odom = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="map_to_odom_static",
-        arguments=[
-            "--x", "0",
-            "--y", "0",
-            "--z", "0",
-            "--roll", "0",
-            "--pitch", "0",
-            "--yaw", "0",
-            "--frame-id", "map",
-            "--child-frame-id", "odom",
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # TF: base_link -> camera_depth_frame
-    #
-    # The smartphone depth sensor is conceptually mounted at the front
-    # of the robot, facing forward. Position it slightly ahead and up.
-    # --------------------------------------------------------
-    camera_tf = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_to_camera_static",
-        arguments=[
-            "--x", "0.3",
-            "--y", "0.0",
-            "--z", "0.2",
-            "--roll", "0",
-            "--pitch", "0",
-            "--yaw", "0",
-            "--frame-id", "base_link",
-            "--child-frame-id", "camera_depth_frame",
-        ],
-        output="screen",
-    )
-
-    # --------------------------------------------------------
-    # Nav2 navigation stack
-    #
-    # nav2_bringup's Lyrical navigation_launch always starts optional
-    # navigation servers and replaces lifecycle_manager_navigation.node_names.
-    # Start only the nodes this project uses so the manager below has one,
-    # accurate lifecycle scope. AMCL is deliberately not started because the
-    # project uses the saved indoor map + Gazebo odometry for this simulation.
-    # --------------------------------------------------------
-    controller_server = Node(
-        package="nav2_controller",
-        executable="controller_server",
-        name="controller_server",
-        output="screen",
-        parameters=[params_file],
-        remappings=[("cmd_vel", "/cmd_vel")],
-    )
-
-    planner_server = Node(
-        package="nav2_planner",
-        executable="planner_server",
-        name="planner_server",
-        output="screen",
-        parameters=[params_file],
-    )
-
-    behavior_server = Node(
-        package="nav2_behaviors",
-        executable="behavior_server",
-        name="behavior_server",
-        output="screen",
-        parameters=[params_file],
-        remappings=[("cmd_vel", "/cmd_vel")],
-    )
-
-    bt_navigator = Node(
-        package="nav2_bt_navigator",
-        executable="bt_navigator",
-        name="bt_navigator",
-        output="screen",
-        parameters=[params_file],
-    )
-
-    navigation_manager = Node(
-        package="nav2_lifecycle_manager",
-        executable="lifecycle_manager",
-        name="lifecycle_manager_navigation",
-        output="screen",
-        parameters=[
-            params_file,
-            {
-                "autostart": True,
-                "node_names": [
-                    "controller_server",
-                    "planner_server",
-                    "behavior_server",
-                    "bt_navigator",
-                ],
-                "use_sim_time": True,
-            },
-        ],
-    )
+    sim = Path(get_package_share_directory("indoor_nav_gazebo")) / "launch" / "simulation.launch.py"
+    loc = Path(get_package_share_directory("indoor_nav_costmap")) / "launch" / "localization.launch.py"
+    nav = Path(get_package_share_directory("indoor_nav_costmap")) / "launch" / "navigation.launch.py"
 
     return LaunchDescription(
         [
-            gazebo,
-            bridge,
-
-            TimerAction(
-                period=3.0,
-                actions=[spawn_robot],
-            ),
-
-            map_to_odom,
-            camera_tf,
-
-            TimerAction(
-                period=5.0,
-                actions=[
-                    depth_bridge,
-                    depth_to_scan,
-                    map_server,
-                    localization_manager,
-                ],
-            ),
-
-            TimerAction(
-                period=15.0,
-                actions=[
-                    controller_server,
-                    planner_server,
-                    behavior_server,
-                    bt_navigator,
-                ],
-            ),
-
-            # Let the four lifecycle nodes create their services before their
-            # manager starts configuring and activating them.
-            TimerAction(
-                period=17.0,
-                actions=[navigation_manager],
-            ),
+            _include(sim),
+            TimerAction(period=5.0, actions=[_include(loc)]),
+            TimerAction(period=45.0, actions=[_include(nav)]),
         ]
     )

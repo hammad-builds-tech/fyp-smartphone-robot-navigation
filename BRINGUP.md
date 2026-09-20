@@ -1,5 +1,42 @@
 # FYP Bringup Guide
 
+## Quick Start (verified 2026-09-20)
+
+```bash
+# Terminal 1 — backend + MiDaS
+~/FYP/run_backend.sh
+
+# Terminal 2 — full stack (backend must be healthy first)
+~/FYP/run_system.sh
+```
+
+`run_system.sh` brings the stack up in data-flow order with readiness gates:
+simulation (Gazebo + bridges + robot) -> localization (depth bridge, depth_to_scan,
+map_server, AMCL with automated initial pose) -> navigation (Nav2 servers).
+
+Manual phased bringup (each phase is a separate detached process):
+
+```bash
+source /opt/ros/lyrical/setup.bash
+source ~/FYP/ros2_ws/install/setup.bash
+export GZ_IP=127.0.0.1   # critical: see Troubleshooting
+
+ros2 launch indoor_nav_gazebo simulation.launch.py
+# wait ~30 s, then:
+ros2 launch indoor_nav_costmap localization.launch.py
+# wait for map->odom TF, then:
+ros2 launch indoor_nav_costmap navigation.launch.py
+```
+
+Stop everything with `~/FYP/scripts/fyp_teardown.sh`.
+
+Readiness checks before sending a goal:
+
+```bash
+ros2 run tf2_ros tf2_echo map base_link          # must print a Translation
+cd /tmp && python3 flow_probe.py                 # clock/depth/scan counts climb
+```
+
 ## Current Baseline
 
 Date: 2026-09-12

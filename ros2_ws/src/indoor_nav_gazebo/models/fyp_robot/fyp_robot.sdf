@@ -92,6 +92,9 @@
       <child>left_wheel</child>
       <axis>
         <xyz>0 1 0</xyz>
+        <dynamics>
+          <damping>0.01</damping>
+        </dynamics>
       </axis>
     </joint>
 
@@ -100,11 +103,16 @@
       <child>right_wheel</child>
       <axis>
         <xyz>0 1 0</xyz>
+        <dynamics>
+          <damping>0.01</damping>
+        </dynamics>
       </axis>
     </joint>
 
     <link name="caster">
-      <pose>-0.25 0 -0.12 0 0 0</pose>
+      <!-- z chosen so the caster bottom (-0.28 from base origin) matches the
+           wheel bottoms, keeping the chassis level instead of tipping back. -->
+      <pose>-0.25 0 -0.20 0 0 0</pose>
       <collision name="collision">
         <geometry>
           <sphere>

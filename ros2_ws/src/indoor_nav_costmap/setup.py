@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'indoor_nav_costmap'
@@ -11,6 +12,8 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', ['config/nav2_params.yaml']),
+        ('share/' + package_name + '/launch', glob('launch/*.py')),
+        ('share/' + package_name + '/maps', glob('maps/*')),
     ],
     package_data={'': ['py.typed']},
     install_requires=['setuptools'],
