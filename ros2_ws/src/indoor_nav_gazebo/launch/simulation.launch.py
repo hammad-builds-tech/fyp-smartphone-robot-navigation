@@ -21,7 +21,14 @@ def generate_launch_description():
 
     pkg_dir = Path(__file__).resolve().parent.parent
 
-    world = pkg_dir / "worlds" / "indoor_world.sdf"
+    # FYP_WORLD=<absolute path to an .sdf world> overrides the default indoor
+    # world, e.g. the real-room replica generated from the reconstruction:
+    #   FYP_WORLD=~/FYP/ros2_ws/src/indoor_nav_gazebo/worlds/realroom_world.sdf
+    world = Path(
+        os.environ.get(
+            "FYP_WORLD", pkg_dir / "worlds" / "indoor_world.sdf"
+        )
+    ).expanduser()
     robot = pkg_dir / "models" / "fyp_robot" / "fyp_robot.sdf"
 
     gazebo = ExecuteProcess(
@@ -60,10 +67,11 @@ def generate_launch_description():
             # too close for a start pose with robot_radius 0.40). z=0.05 puts
             # the wheel bottoms (0.28 below base_link origin, model pose +0.25)
             # just above the floor so the robot settles without a hard drop.
+            # FYP_SPAWN="x,y" overrides for custom worlds (real-room replica).
             "-x",
-            "0",
+            os.environ.get("FYP_SPAWN_X", "0"),
             "-y",
-            "-2",
+            os.environ.get("FYP_SPAWN_Y", "-2"),
             "-z",
             "0.05",
         ],
