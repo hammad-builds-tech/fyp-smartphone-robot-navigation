@@ -24,10 +24,16 @@ def generate_launch_description():
         "/home/hammad/FYP/ros2_ws/src/"
         "indoor_nav_costmap/config/nav2_params.yaml"
     )
-    map_file = (
+    # Map can be overridden, e.g. a map generated from the real-room
+    # reconstruction: FYP_MAP=~/FYP/realroom/realroom_map.yaml
+    map_file = os.environ.get(
+        "FYP_MAP",
         "/home/hammad/FYP/ros2_ws/src/"
-        "indoor_nav_costmap/maps/indoor_map.yaml"
+        "indoor_nav_costmap/maps/indoor_map.yaml",
     )
+    # AMCL initial pose override for non-default maps: FYP_INITIAL_POSE="x,y"
+    _ip = os.environ.get("FYP_INITIAL_POSE", "0.0,-2.0").split(",")
+    initial_pose = (float(_ip[0]), float(_ip[1]))
 
     backend_url = os.environ.get(
         "FYP_BACKEND_URL",
@@ -88,8 +94,42 @@ def generate_launch_description():
         executable="amcl",
         name="amcl",
         output="screen",
-        parameters=[params_file],
+        parameters=[params_file, {"set_initial_pose": True, "initial_pose.x": initial_pose[0], "initial_pose.y": initial_pose[1]}],
         remappings=[("scan", "/scan")],
+    )
+
+    # Report Stage 3 + 4: depth -> 3D point cloud -> filtering -> 2D
+    # occupancy grid. This is the report-defined perception representation.
+    depth_pipeline = Node(
+        package="indoor_nav_costmap",
+        executable="depth_pipeline_node",
+        output="screen",
+        parameters=[
+            {
+                "depth_topic": "/smartphone/depth",
+                "pointcloud_topic": "/camera/depth/points",
+                "grid_topic": "/depth_occupancy_grid",
+                "frame_id": "camera_depth_frame",
+                "use_sim_time": True,
+            }
+        ],
+    )
+
+    # Report representation -> Nav2: republishes the depth-derived occupancy
+    # grid as /smartphone_map (static-layer wire format + updates stream) so
+    # both costmaps consume the report pipeline's map instead of /scan.
+    grid_bridge = Node(
+        package="indoor_nav_costmap",
+        executable="pointcloud_costmap_layer",
+        output="screen",
+        parameters=[
+            {
+                "grid_topic": "/depth_occupancy_grid",
+                "pointcloud_topic": "/camera/depth/points",
+                "map_topic": "/smartphone_map",
+                "use_sim_time": True,
+            }
+        ],
     )
 
     localization_manager = Node(
@@ -110,6 +150,8 @@ def generate_launch_description():
         [
             depth_bridge,
             depth_to_scan,
+            depth_pipeline,
+            grid_bridge,
             map_server,
             amcl,
             localization_manager,

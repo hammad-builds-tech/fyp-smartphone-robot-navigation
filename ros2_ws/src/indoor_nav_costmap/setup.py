@@ -34,6 +34,8 @@ setup(
             'depth_to_pointcloud = indoor_nav_costmap.depth_to_pointcloud:main',
             'depth_to_scan = indoor_nav_costmap.depth_to_scan:main',
             'pointcloud_to_grid = indoor_nav_costmap.pointcloud_to_grid:main',
+            'depth_pipeline_node = indoor_nav_costmap.depth_pipeline_node:main',
+            'pointcloud_costmap_layer = indoor_nav_costmap.pointcloud_costmap_layer:main',
         ],
     },
 )

@@ -42,16 +42,35 @@ controller_server:
     controller_plugins: ["FollowPath"]
 
     FollowPath:
-      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.15
-      min_lookahead_dist: 0.20
-      max_lookahead_dist: 0.60
-      lookahead_dist: 0.40
-      use_velocity_scaled_lookahead_dist: true
-      transform_tolerance: 0.5
-      rotate_to_heading_angular_vel: 0.5
-      max_angular_accel: 1.0
-      max_robot_pose_search_dist: 10.0
+      plugin: "dwb_core::DWBLocalPlanner"
+      # Velocities match the fyp_robot's Gazebo differential drive limits.
+      min_vel_x: 0.0
+      max_vel_x: 0.15
+      min_vel_theta: -0.5
+      max_vel_theta: 0.5
+      acc_lim_x: 1.0
+      decel_lim_x: -1.0
+      acc_lim_theta: 1.0
+      decel_lim_theta: -1.0
+      max_speed_xy: 0.15
+      min_speed_xy: 0.0
+      min_speed_theta: 0.2
+      # Report-aligned critics (obstacle + inflation from the depth-derived
+      # occupancy/costmap representation).
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "PathAlign", "GoalAlign", "PathDist", "GoalDist"]
+      BaseObstacle.scale: 0.02
+      PathAlign.scale: 32.0
+      PathAlign.forward_point_distance: 0.1
+      GoalAlign.scale: 24.0
+      GoalAlign.forward_point_distance: 0.1
+      PathDist.scale: 32.0
+      GoalDist.scale: 24.0
+      RotateToGoal.scale: 32.0
+      RotateToGoal.slowing_distance: 0.25
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.25
+      trans_stopped_velocity: 0.05
+      sim_period: 0.1
 
 behavior_server:
   ros__parameters:
@@ -127,31 +146,21 @@ global_costmap:
       update_frequency: 2.0
       publish_frequency: 2.0
 
-      # The smartphone depth-derived /scan must also mark obstacles in the
-      # global costmap, otherwise plans cut through objects the camera sees.
+      # Report pipeline: the smartphone depth-derived occupancy grid
+      # (depth -> point cloud -> filter -> 2D grid, republished by
+      # pointcloud_costmap_layer) is ingested as a continuously refreshed
+      # map-layer, replacing the previous LaserScan-based obstacle layer.
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
 
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
-        map_topic: /map
-        subscribe_to_updates: false
+        map_topic: /smartphone_map
+        subscribe_to_updates: true
 
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: true
-        observation_sources: scan
-
-        scan:
-          topic: /scan
-          data_type: "LaserScan"
-          clearing: true
-          marking: true
-          obstacle_max_range: 3.0
-          raytrace_max_range: 3.5
-          obstacle_min_range: 0.15
-          raytrace_min_range: 0.15
-          inf_is_valid: false
+        enabled: false
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -172,28 +181,27 @@ local_costmap:
       publish_frequency: 5.0
       robot_radius: 0.40
 
-      plugins: ["obstacle_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+        map_topic: /smartphone_map
+        subscribe_to_updates: true
 
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: true
-        observation_sources: scan
-
-        scan:
-          topic: /scan
-          data_type: "LaserScan"
-          clearing: true
-          marking: true
-          obstacle_max_range: 3.0
-          raytrace_max_range: 3.5
-          obstacle_min_range: 0.15
-          raytrace_min_range: 0.15
-          inf_is_valid: false
+        enabled: false
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         inflation_radius: 0.45
         cost_scaling_factor: 3.0
+
+      # Keep the pre-existing scan topic resolvable for observation-buffer
+      # defaults; the layer above is disabled because the report defines the
+      # perception representation as an occupancy grid, not a LaserScan.
+      always_send_full_costmap: true
 
 lifecycle_manager_localization:
   ros__parameters:

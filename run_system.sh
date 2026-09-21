@@ -46,6 +46,7 @@ source ros2_ws/install/setup.bash
 # Load conda env for backend/phone-sim commands
 FYP_PY=/home/hammad/miniconda3/envs/fyp/bin/python
 [ -x "$FYP_PY" ] || FYP_PY=$(command -v python3)
+FYP_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 SIM_PHONE="${SIM_PHONE:-1}"
 SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
@@ -106,6 +107,9 @@ wait_for() {  # wait_for <description> <timeout_s> <probe-command...>
 # /scan is ~1 Hz on CPU MiDaS, so a small window is required for the rate
 # estimate to appear inside the probe timeout.
 topic_flowing() { timeout 15 ros2 topic hz "$1" --window 3 2>/dev/null | grep -q "average rate"; }
+# Sensor-data topics use best-effort QoS, which `ros2 topic hz` (reliable)
+# cannot receive. Probe with a matching sensor-QoS rclpy listener instead.
+sensor_topic_flowing() { timeout 15 /usr/bin/python3 "$FYP_DIR/scripts/topic_probe.py" "$1" 2>/dev/null; }
 tf_available()  { timeout 12 ros2 run tf2_ros tf2_echo "$1" "$2" 2>/dev/null | grep -m1 -q "Rotation"; }
 lifecycle_active() { timeout 10 ros2 lifecycle get "/$1" 2>/dev/null | grep -q "active"; }
 backend_healthy() { curl -s -m 3 http://127.0.0.1:8000/health | grep -q '"status"'; }
@@ -169,7 +173,7 @@ info "Phase 2: depth bridge + depth->scan + map server + AMCL (log: /tmp/fyp_loc
 setsid nohup ros2 launch indoor_nav_costmap localization.launch.py \
     > /tmp/fyp_loc.launch.log 2>&1 < /dev/null &
 
-wait_for "/scan flowing (MiDaS depth -> LaserScan)" 90 topic_flowing /scan \
+wait_for "/scan flowing (MiDaS depth -> LaserScan)" 90 sensor_topic_flowing /scan \
     || warn "/scan silent — without a camera stream Nav2 costmaps will see no obstacles"
 wait_for "AMCL map->odom transform" 60 tf_available map odom \
     || warn "map->odom missing — AMCL did not localize"
