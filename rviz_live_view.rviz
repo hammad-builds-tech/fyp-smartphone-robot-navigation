@@ -1,0 +1,71 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Value: true
+    - Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: LiveMap (phone MiDaS)
+      Topic:
+        Depth: 1
+        Value: /smartphone_map
+      Alpha: 0.7
+      Color Scheme: map
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: LivePointCloud (phone MiDaS)
+      Topic:
+        Depth: 1
+        Value: /camera/depth/points
+      Size (m): 0.03
+      Style: Flat Squares
+      Value: true
+    - Class: rviz_default_plugins/LaserScan
+      Enabled: true
+      Name: DepthScan (compat layer)
+      Topic:
+        Depth: 1
+        Value: /scan
+      Size (m): 0.03
+      Style: Flat Squares
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Name: TF
+      Value: true
+    - Class: rviz_default_plugins/Odometry
+      Enabled: true
+      Name: Odom
+      Topic:
+        Depth: 1
+        Value: /odom
+      Value: true
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 12
+      Name: Current View
+      Pitch: 0.9
+      Yaw: 3.6
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400

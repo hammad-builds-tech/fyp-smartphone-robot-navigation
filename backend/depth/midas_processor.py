@@ -5,6 +5,10 @@ import cv2
 import numpy as np
 import torch
 
+# Cap CPU inference threads: MiDaS-on-CPU oversubscribing all cores starves
+# the ROS2/Gazebo stack and destabilizes TF timing (observed live 2026-09-22).
+torch.set_num_threads(6)
+
 
 FYP_DIR = Path.home() / "FYP"
 MIDAS_DIR = FYP_DIR / "MiDaS"
