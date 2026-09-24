@@ -50,6 +50,12 @@ def generate_launch_description():
                 "depth_topic": "/smartphone/depth",
                 "depth_frame_id": "camera_depth_frame",
                 "use_sim_time": True,
+                # Recorded-video test: phone is disconnected after capture,
+                # keep republishing the last phone-derived MiDaS depth frame.
+                "republish_stale": os.environ.get(
+                    "FYP_DEPTH_REPUBLISH_STALE", "0"
+                )
+                == "1",
             }
         ],
     )

@@ -28,6 +28,12 @@ class DepthBridgeNode(Node):
         self.declare_parameter('poll_period', 0.2)
         self.declare_parameter('request_timeout', 0.5)
         self.declare_parameter('offline_log_period', 10.0)
+        # Offline recorded-video mode: when the phone is disconnected the
+        # MiDaS depth sequence stops advancing. Republish the last phone-
+        # derived depth frame (fresh stamps) so the AMCL /scan compatibility
+        # layer and the point-cloud costmap keep operating on the static
+        # environment captured in the recording.
+        self.declare_parameter('republish_stale', False)
 
         self.backend_url = self.get_parameter('backend_url').value
         self.depth_frame_id = self.get_parameter('depth_frame_id').value
@@ -36,6 +42,9 @@ class DepthBridgeNode(Node):
         )
         self.offline_log_period = max(
             1.0, float(self.get_parameter('offline_log_period').value)
+        )
+        self.republish_stale = bool(
+            self.get_parameter('republish_stale').value
         )
         poll_period = max(0.05, float(self.get_parameter('poll_period').value))
         depth_topic = self.get_parameter('depth_topic').value
@@ -47,6 +56,7 @@ class DepthBridgeNode(Node):
         )
         self._session = requests.Session()
         self._last_sequence = None
+        self._last_msg = None
         self._last_offline_log = float('-inf')
         self.timer = self.create_timer(poll_period, self.publish_depth)
 
@@ -98,9 +108,13 @@ class DepthBridgeNode(Node):
             return
 
         # The backend increments this header only after it writes a new MiDaS
-        # frame. Do not keep feeding a frozen frame into the local costmap.
+        # frame. Do not keep feeding a frozen frame into the local costmap
+        # unless offline republish is enabled (recorded-video test mode).
         sequence = response.headers.get('X-FYP-Depth-Sequence')
         if sequence and sequence == self._last_sequence:
+            if self.republish_stale and self._last_msg is not None:
+                self._last_msg.header.stamp = self.get_clock().now().to_msg()
+                self.depth_pub.publish(self._last_msg)
             return
 
         image_array = np.frombuffer(response.content, dtype=np.uint8)
@@ -119,6 +133,7 @@ class DepthBridgeNode(Node):
         msg.data = depth.tobytes()
 
         self.depth_pub.publish(msg)
+        self._last_msg = msg
         self._last_sequence = sequence
 
     def destroy_node(self):
