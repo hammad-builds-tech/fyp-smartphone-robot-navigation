@@ -143,6 +143,10 @@ def main():
     models = []
     z1 = args.wall_height
     t = args.thickness
+    # floor slab: light grey, covers the mapped extent so the room reads as a room
+    models.append(model('floor_slab', cx_room, cy_room, -0.05, 0.0,
+                        ex + 2 * t, ey + 2 * t,
+                        '0.68 0.67 0.64 1', '0.82 0.81 0.78 1'))
     models.append(model('wall_north', cx_room, y_hi, 0, z1, ex + t, t,
                         '0.62 0.60 0.55 1', '0.75 0.72 0.66 1'))
     models.append(model('wall_south', cx_room, y_lo, 0, z1, ex + t, t,
@@ -152,7 +156,15 @@ def main():
     models.append(model('wall_east', x_hi, cy_room, 0, z1, t, ey + t,
                         '0.58 0.56 0.52 1', '0.70 0.68 0.62 1'))
 
+    def wall_id(x, y, eps=0.10):
+        if abs(x - x_lo) < eps or abs(x - x_hi) < eps:
+            return 'W'
+        if abs(y - y_lo) < eps or abs(y - y_hi) < eps:
+            return 'W'
+        return None
+
     n = 0
+    subsumed = 0
     for (ca, rb, cb, rt) in boxes:
         x0 = cell_x(int(ca)) - res / 2
         x1 = cell_x(math.ceil(cb) - 1) + res / 2
@@ -162,23 +174,28 @@ def main():
         if sx * sy < args.min_area:
             continue
         if sx >= ex * 0.95 or sy >= ey * 0.95:
-            continue  # spans the room -> part of the perimeter
-        n += 1
+            subsumed += 1
+            continue  # perimeter-scale surface -> already represented by walls
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        # captured surfaces that reach the room boundary are walls, not props
+        if wall_id(x0, y0) or wall_id(x1, y1) or wall_id(x0, y1) or wall_id(x1, y0):
+            subsumed += 1
+            continue
+        # render from the floor up (full-height block) so geometry looks solid
+        n += 1
         models.append(model(f'obstacle_{n:02d}', cx, cy,
-                            args.obst_base, args.obst_top, sx, sy,
-                            '0.30 0.42 0.55 1', '0.38 0.52 0.68 1'))
-    print(f"interior obstacles rendered: {n}")
+                            0.0, args.obst_top, sx, sy,
+                            '0.42 0.48 0.58 1', '0.50 0.58 0.72 1'))
+    print(f"interior obstacles rendered: {n} (perimeter-adjacent surfaces subsumed "
+          f"by walls: {subsumed})")
 
-    # top-down GUI camera over the room center
-    cam_h = max(ex, ey) * 1.35 + 2.0
+    # top-down-ish GUI camera over the room (no custom gui plugins: this
+    # install lacks gz-sim-3d-view-system, and a broken <gui> block would
+    # override the default working GUI config — leave plugins to defaults)
+    cam_h = max(ex, ey) * 1.05 + 2.5
     gui = f'''  <gui>
-    <plugin name="3D View" filename="gz-sim-3d-view-system">
-      <camera_name>user_cam</camera_name>
-    </plugin>
-    <plugin filename="gz-sim-navigation-messages-system" name="gz::sim::systems::NavigationMessages"/>
     <camera name="user_cam">
-      <pose>{cx_room:.2f} {cy_room:.2f} {cam_h:.2f} 0 -1.5707 0</pose>
+      <pose>{cx_room:.2f} {cy_room - 1.0:.2f} {cam_h:.2f} 0 -1.25 0</pose>
       <horizontal_fov>1.05</horizontal_fov>
     </camera>
   </gui>'''
@@ -202,9 +219,9 @@ def main():
     <model name="ground_plane">
       <static>true</static>
       <link name="link">
-        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry></collision>
-        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry>
-          <material><ambient>0.42 0.42 0.44 1</ambient><diffuse>0.52 0.52 0.55 1</diffuse></material></visual>
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>80 80</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>80 80</size></plane></geometry>
+          <material><ambient>0.40 0.40 0.42 1</ambient><diffuse>0.48 0.48 0.51 1</diffuse></material></visual>
       </link>
     </model>
 {chr(10).join(models)}
