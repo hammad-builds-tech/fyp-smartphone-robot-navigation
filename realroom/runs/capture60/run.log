@@ -1,0 +1,58 @@
+
+===== [0s] STAGE A — reconstruction pipeline (MiDaS -> COLMAP -> fusion -> map -> world -> spawn/goal) =====
+== [0s] dataset /home/hammad/FYP/realroom/runs/capture60 (capture60), 20 frames
+== [0s] COLMAP: 9/20 images registered
+== [0s] selecting spawn/goal from captured free space
+largest walkable component: 8051 cells
+pairs tried: 469094
+SPAWN world: -4.6 7.49 clear: 1.9
+GOAL world: 0.6 3.24 clear: 1.84
+straight line crosses 20 cells of captured geometry; biggest blocked component area: 895 dist: 6.72
+SPAWN_X=-4.60 SPAWN_Y=7.49 GOAL_X=0.60 GOAL_Y=3.24
+== [36s] PIPELINE OK -> /home/hammad/FYP/realroom/runs/capture60/nav_targets.env
+dataset: /home/hammad/FYP/realroom/runs/capture60
+spawn (-4.60,7.49)  goal (0.60,3.24)
+
+===== [36s] STAGE B — Gazebo + Nav2 bring-up (map /home/hammad/FYP/realroom/runs/capture60/realroom_capture60.yaml) =====
+== killed; starting backend (video stream locked: offline) ==
+== sim (world /home/hammad/FYP/realroom/runs/capture60/realroom_capture60_world.sdf, spawn -4.60,7.49) ==
+== static map->odom TF ==
+== map server (BEFORE nav2 so costmaps init with the map) ==
+map_server: active [3]
+== perception pipeline (offline stale republish + grid bridge) ==
+== nav2 on /home/hammad/FYP/realroom/runs/capture60/realroom_capture60.yaml ==
+controller_server: active [3]
+planner_server: active [3]
+behavior_server: active [3]
+bt_navigator: active [3]
+== final nav states ==
+controller_server: active [3]
+planner_server: active [3]
+behavior_server: active [3]
+bt_navigator: active [3]
+== GUIs ==
+== unpause world 'capture60' (if paused) ==
+clock:   sec: 105
+odom: A message was lost!!! 	total count change:10 	total count: 10--- x: -4.30917234238368e-06 y: -4.5918400067010614e-11 z: 0.0 --- 
+gz /tf: NO PUBLISHER
+DONE bringup (spawn -4.60,7.49)
+
+===== [207s] STAGE C — verify plan, then navigate =====
+PLAN_OK poses=290 len=7.30 m straight=6.72 m ratio=1.09
+plan dumped: /tmp/fyp30_plan.log (290 poses)
+[INFO] [1790616314.410044373] [fyp_nav_final]: waiting for navigate_to_pose server...
+START pose: (-4.600, 7.490, yaw 0.00)
+NAV_GOAL: (0.600, 3.240, yaw 0.00)
+t=   20s vel=0.134 m/s pos=(-4.205, 6.342)
+t=   40s vel=0.150 m/s pos=(-3.550, 5.109)
+t=   60s vel=0.150 m/s pos=(-2.221, 4.317)
+t=   80s vel=0.150 m/s pos=(-0.929, 3.770)
+t=  100s vel=0.063 m/s pos=(0.456, 3.299)
+NAV_RESULT_STATUS: 4
+REACHED the goal! final_pose=(0.481, 3.289, yaw -0.25)
+OVERALL: PASS
+
+===== [321s] STAGE D — result =====
+trajectory: MOVED 6.59 m
+total wall time: 321 s
+RUN OK (goal reached)

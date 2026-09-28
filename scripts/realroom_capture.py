@@ -59,38 +59,42 @@ def main():
     print(f"== SWEEP THE PHONE SLOWLY AROUND THE ROOM NOW ({args.frames} snapshots x {args.interval}s) ==")
 
     log_rows = []
-    for i in range(1, args.frames + 1):
-        # RGB frame
-        fr = client.get(f"{BACKEND}/latest-frame", timeout=10)
-        rgb = None
-        if fr.status_code == 200:
-            rgb = cv2.imdecode(np.frombuffer(fr.content, np.uint8), cv2.IMREAD_COLOR)
-        if rgb is None:
-            j = fr.json() if fr.headers.get("content-type", "").startswith("application/json") else {}
-            lp = j.get("file")
-            if lp and Path(lp).exists():
-                rgb = cv2.imread(lp)
-        # Depth image
-        dep, seq = fetch_png(client, f"{BACKEND}/latest-depth-image")
+    try:
+        for i in range(1, args.frames + 1):
+            # RGB frame
+            fr = client.get(f"{BACKEND}/latest-frame", timeout=10)
+            rgb = None
+            if fr.status_code == 200:
+                rgb = cv2.imdecode(np.frombuffer(fr.content, np.uint8), cv2.IMREAD_COLOR)
+            if rgb is None:
+                j = fr.json() if fr.headers.get("content-type", "").startswith("application/json") else {}
+                lp = j.get("file")
+                if lp and Path(lp).exists():
+                    rgb = cv2.imread(lp)
+            # Depth image
+            dep, seq = fetch_png(client, f"{BACKEND}/latest-depth-image")
 
-        if rgb is None or dep is None:
-            print(f"[{i:02d}] MISS (rgb={rgb is not None}, depth={dep is not None}) — retrying")
-            time.sleep(1.5)
-            continue
+            if rgb is None or dep is None:
+                print(f"[{i:02d}] MISS (rgb={rgb is not None}, depth={dep is not None}) — retrying")
+                time.sleep(1.5)
+                continue
 
-        name = f"frame_{i:04d}"
-        cv2.imwrite(str(img_dir / f"{name}.jpg"), rgb)
-        cv2.imwrite(str(dep_dir / f"{name}.png"), dep)
-        log_rows.append([name, seq, h["depth_shape"][0], h["depth_shape"][1]])
-        print(f"[{i:02d}] {name}.jpg {rgb.shape[1]}x{rgb.shape[0]}  depth_seq={seq}")
+            name = f"frame_{i:04d}"
+            cv2.imwrite(str(img_dir / f"{name}.jpg"), rgb)
+            cv2.imwrite(str(dep_dir / f"{name}.png"), dep)
+            log_rows.append([name, seq, h["depth_shape"][0], h["depth_shape"][1]])
+            print(f"[{i:02d}] {name}.jpg {rgb.shape[1]}x{rgb.shape[0]}  depth_seq={seq}", flush=True)
 
-        if i < args.frames:
-            time.sleep(args.interval)
-
-    with open(out / "capture_log.csv", "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["frame", "depth_seq", "depth_h", "depth_w"])
-        w.writerows(log_rows)
+            if i < args.frames:
+                time.sleep(args.interval)
+    finally:
+        # ALWAYS persist the capture log, even if the loop is killed by a
+        # 30-second timeout (KeyboardInterrupt) — the frames on disk are the
+        # dataset; the log documents which depth sequence each frame used.
+        with open(out / "capture_log.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["frame", "depth_seq", "depth_h", "depth_w"])
+            w.writerows(log_rows)
 
     print(f"Captured {len(log_rows)} paired frames -> {out}")
     if len(log_rows) < 8:

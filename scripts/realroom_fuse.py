@@ -58,6 +58,11 @@ def read_cameras(path):
             return dict(fx=float(p[4]), fy=float(p[5]), cx=float(p[6]), cy=float(p[7]), w=int(p[2]), h=int(p[3]))
         if model in ("SIMPLE_PINHOLE", "SIMPLE_RADIAL", "RADIAL"):
             return dict(fx=float(p[4]), fy=float(p[4]), cx=float(p[5]), cy=float(p[6]), w=int(p[2]), h=int(p[3]))
+        if model == "OPENCV":
+            # fx fy cx cy + distortion (k1 k2 p1 p2 ...). Distortion is
+            # negligible at the phone camera's narrow FOV; the pinhole
+            # projection equations from the report are applied directly.
+            return dict(fx=float(p[4]), fy=float(p[5]), cx=float(p[6]), cy=float(p[7]), w=int(p[2]), h=int(p[3]))
         raise ValueError(f"Unsupported camera model: {model}")
     raise RuntimeError("No camera in file")
 

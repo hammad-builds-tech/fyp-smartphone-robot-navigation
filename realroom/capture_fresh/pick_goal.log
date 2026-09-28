@@ -1,0 +1,6 @@
+largest walkable component: 27234 cells
+pairs tried: 715607
+SPAWN world: 8.01 13.73 clear: 0.64
+GOAL world: 0.81 17.58 clear: 1.79
+straight line crosses 5 cells of captured geometry; biggest blocked component area: 765 dist: 8.16
+SPAWN_X=8.01 SPAWN_Y=13.73 GOAL_X=0.81 GOAL_Y=17.58

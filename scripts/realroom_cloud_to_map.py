@@ -61,6 +61,11 @@ def main():
     ap.add_argument("--min-points", type=int, default=3, help="points required to mark a cell occupied")
     ap.add_argument("--max-ray", type=float, default=6.0, help="max carving ray length (m)")
     ap.add_argument("--pad", type=float, default=0.5, help="border padding (m)")
+    ap.add_argument("--voxel", type=float, default=0.05, help="Stage-4 voxel downsampling size (m)")
+    ap.add_argument("--sor-k", type=int, default=20, help="Stage-4 statistical outlier removal neighbours")
+    ap.add_argument("--sor-std", type=float, default=2.0, help="Stage-4 SOR std ratio")
+    ap.add_argument("--ransac-dist", type=float, default=0.02, help="Stage-4 RANSAC plane distance threshold (m)")
+    ap.add_argument("--planes", type=int, default=2, help="max horizontal planes to remove (floor, ceiling)")
     ap.add_argument("--up-axis", choices=["auto", "x", "y", "z"], default="auto",
                     help="which cloud axis is room height (auto = smallest extent)")
     args = ap.parse_args()
@@ -101,6 +106,36 @@ def main():
         pts = pts[:, order]
         centers = centers[:, order]
         print(f"rotated cloud: up-axis {up} -> z")
+
+    # ---- report Stage 4: point-cloud filtering ----
+    # 1) voxel downsampling  2) statistical outlier removal  3) RANSAC floor
+    # removal. (4) pass-through filtering is the obstacle-band slice below,
+    # applied in the gravity-aligned frame.
+    if HAVE_O3D:
+        n0 = len(pts)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pts.astype(np.float64))
+        pcd = pcd.voxel_down_sample(args.voxel)
+        pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=args.sor_k, std_ratio=args.sor_std)
+        sor_pts = np.asarray(pcd.points)
+        removed = 0
+        work = o3d.geometry.PointCloud()
+        work.points = o3d.utility.Vector3dVector(sor_pts)
+        for _ in range(args.planes):
+            if len(work.points) < 500:
+                break
+            model, inliers = work.segment_plane(args.ransac_dist, 3, 200)
+            a, b, c, d = model
+            n = math.sqrt(a*a + b*b + c*c)
+            # floor/ceiling-like = horizontal plane (normal close to vertical);
+            # walls have horizontal normals and are kept.
+            if abs(c) / n > 0.85 and len(inliers) > 0.02 * len(sor_pts):
+                work = work.select_by_index(inliers, invert=True)
+                removed += len(inliers)
+            else:
+                break
+        pts = np.asarray(work.points)
+        print(f"Stage-4 filtering: voxel+SOR {n0} -> {len(sor_pts)}; RANSAC floor removed {removed} -> {len(pts)}")
 
     # ---- obstacle band ----
     band = pts[(pts[:, 2] >= args.zmin) & (pts[:, 2] <= args.zmax)]

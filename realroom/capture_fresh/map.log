@@ -1,0 +1,9 @@
+cloud points: 223488
+camera centers: 12
+auto up-axis: x (extents: [17.24 31.8  25.75])
+rotated cloud: up-axis x -> z
+Stage-4 filtering: voxel+SOR 223488 -> 146998; RANSAC floor removed 0 -> 146998
+points in obstacle band z=[0.15,1.2]: 28061
+map: 547x521 cells @ 0.05 m  origin=(-13.57,-3.99)
+carved rays: 108992
+MAP WRITTEN: /home/hammad/FYP/realroom/capture_fresh/realroom_capture_fresh.pgm/.yaml  occupied=2453 free=36065 unknown=246469

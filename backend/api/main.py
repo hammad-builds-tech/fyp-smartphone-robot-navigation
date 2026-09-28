@@ -34,6 +34,11 @@ pending_frame: Optional[np.ndarray] = None
 processing_lock = threading.Lock()
 inference_active = False
 
+# Hard offline switch: when True, ALL new video websocket connections are
+# rejected with policy code 1008. Used to enforce the 30-second capture
+# window so all post-processing runs purely OFFLINE on saved data.
+video_stream_locked = os.environ.get("FYP_VIDEO_STREAM_LOCK", "0") == "1"
+
 
 # =========================
 # LAN AUTO-DISCOVERY
@@ -194,6 +199,7 @@ def health():
         "depth_shape": list(depth.shape) if depth is not None else None,
         "inference_active": active,
         "discovery_port": DISCOVERY_PORT,
+        "video_stream_locked": video_stream_locked,
     }
 
 
@@ -207,6 +213,12 @@ async def video_websocket(websocket: WebSocket):
     global latest_frame
     global frame_count
     global pending_frame
+
+    if video_stream_locked:
+        await websocket.accept()
+        await websocket.close(code=1008, reason="stream locked: capture window closed")
+        print("PHONE REJECTED (stream locked - offline enforcement)")
+        return
 
     await websocket.accept()
 
@@ -362,11 +374,24 @@ def get_latest_depth():
 @app.get("/latest-depth-image")
 def get_latest_depth_image():
 
+    global latest_depth_png
+
     with processing_lock:
         depth = latest_depth
         png_bytes = latest_depth_png
 
-    if depth is None or png_bytes is None:
+    # Server restart recovery: the last phone-derived MiDaS depth PNG is
+    # persisted on disk by the inference worker, so a backend restart (e.g.
+    # uvicorn --reload) must not 404 and drop the /scan compatibility layer.
+    if png_bytes is None:
+        persisted = DEPTH_DIR / "latest_depth.png"
+        if persisted.exists() and persisted.stat().st_size > 0:
+            png_bytes = persisted.read_bytes()
+            latest_depth_png = png_bytes
+
+    # png_bytes alone is sufficient: after a restart the last phone-derived
+    # depth is restored from disk even though no inference has run yet.
+    if png_bytes is None:
         return JSONResponse(
             status_code=404,
             content={

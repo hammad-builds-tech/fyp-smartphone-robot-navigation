@@ -102,8 +102,8 @@ def main():
     for i, (c, r, w, h) in enumerate(boxes):
         x0 = xs[c] - res / 2
         x1 = xs[c + w - 1] + res / 2
-        y0 = ys[r + h - 1] - res / 2
-        y1 = ys[r] + res / 2
+        y0 = ys[r] - res / 2
+        y1 = ys[r + h - 1] + res / 2
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         sx, sy = x1 - x0, y1 - y0
         models.append(

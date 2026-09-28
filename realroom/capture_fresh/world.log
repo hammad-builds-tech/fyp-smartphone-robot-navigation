@@ -1,0 +1,6 @@
+map 547x521 @ 0.05 m, occupied 2453, carved free 246469
+components: 455 total, kept 66, dropped 389 specks (518 cells)
+obstacle rects: 1935 exact -> 557 after merge
+room extent: x [-13.62,13.83] y [-4.04,22.11] (27.45 x 26.15 m)
+interior obstacles rendered: 204
+WORLD WRITTEN: /home/hammad/FYP/realroom/capture_fresh/realroom_capture_fresh_world.sdf (XML valid)

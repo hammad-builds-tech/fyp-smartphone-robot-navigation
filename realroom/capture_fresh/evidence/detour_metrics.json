@@ -1,0 +1,47 @@
+{
+  "exec_len": 8.947853640826917,
+  "straight": 8.164710650108795,
+  "ratio": 1.0959180336302166,
+  "max_dev": 1.375412489339149,
+  "bend": [
+    7.4585,
+    15.5846
+  ],
+  "dev_at_blocker_m": 0.8395916119047322,
+  "dev_min_in_blocker_span_m": 0.8054504662590077,
+  "blocker_t_span": [
+    0.5343137254901961,
+    0.6887254901960784
+  ],
+  "blocking_comp": 65,
+  "blocking_area_cells": 765,
+  "blocking_bbox_m": [
+    2.2070000000000007,
+    16.333000000000002,
+    4.307,
+    12.533000000000001
+  ],
+  "d_line": 0.030626591477612288,
+  "d_path": 0.781764823972014,
+  "bend_comp": 166,
+  "bend_comp_area": 12,
+  "bend_to_comp_m": 1.3647344063956182,
+  "provenance_median_m": 0.014937201879871428,
+  "provenance_p95_m": 0.02588157978147665,
+  "provenance_max_m": 0.0318961694408575,
+  "cloud_points_in_blocker_cells": 3302,
+  "min_clearance_blocker_m": 0.781764823972014,
+  "min_clearance_any_m": 0.45000001788139343,
+  "gates": {
+    "reached_goal": true,
+    "length_ratio>=1.05": true,
+    "max_dev>=0.5m": true,
+    "blocker_substantial(>=25 cells)": true,
+    "path_avoids_blocker(d_path-d_line>=0.3)": true,
+    "offset_at_blocker>=0.5m": true,
+    "provenance_median<=0.15m": true,
+    "provenance_p95<=0.30m": true,
+    "min_clearance_blocker>=0.20m": true
+  },
+  "verdict": "PASS"
+}
