@@ -73,7 +73,9 @@ def generate_launch_description():
             "-y",
             os.environ.get("FYP_SPAWN_Y", "-2"),
             "-z",
-            "0.05",
+            # just above the 0.28 resting height: gentle settle,
+            # no deep floor penetration (buried spawns jam the solver)
+            "0.30",
         ],
         output="screen",
     )
