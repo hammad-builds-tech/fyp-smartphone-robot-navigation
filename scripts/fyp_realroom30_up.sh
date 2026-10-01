@@ -26,13 +26,16 @@ sleep 5
 
 # ---------------------------------------------------------------------------
 # GENERIC MODE: every dataset-specific value comes from the environment.
-# fyp30_run_pipeline.sh exports them via <dataset>/nav_targets.env; the
-# defaults below reproduce the archived capture_fresh test when unset.
+# Source the dataset's nav_targets.env first so the CURRENT reconstruction
+# (capture_fresh, world name "capture_fresh") is always used even when the
+# caller forgets to export the values. Explicit env still wins for SPAWN.
 # ---------------------------------------------------------------------------
+_fyp_env="$HOME/FYP/realroom/capture_fresh/nav_targets.env"
+[ -r "$_fyp_env" ] && . "$_fyp_env"
 SPAWN_X=${SPAWN_X:-8.01}
 SPAWN_Y=${SPAWN_Y:-13.73}
-FYP_MAP=${FYP_MAP:-$HOME/FYP/realroom/capture_fresh/realroom_fresh.yaml}
-FYP_WORLD=${FYP_WORLD:-$HOME/FYP/realroom/capture_fresh/realroom_fresh_world.sdf}
+FYP_MAP=${FYP_MAP:-$HOME/FYP/realroom/capture_fresh/realroom_capture_fresh.yaml}
+FYP_WORLD=${FYP_WORLD:-$HOME/FYP/realroom/capture_fresh/realroom_capture_fresh_world.sdf}
 FYP_NO_RVIZ=${FYP_NO_RVIZ:-0}
 
 echo "== killed; starting backend (video stream locked: offline) =="
@@ -47,9 +50,20 @@ setsid env FYP_WORLD=$FYP_WORLD \
 sleep 30
 
 echo "== static map->odom TF =="
+# With OdometryPublisher (true-pose odom) odom==world, so the map->odom TF
+# must be identity; TF_X/TF_Y override keeps the old +SPAWN convention
+# available for wheel-integration odom.
 setsid nohup /opt/ros/lyrical/lib/tf2_ros/static_transform_publisher \
-    --x $SPAWN_X --y $SPAWN_Y --z 0 --roll 0 --pitch 0 --yaw 0 \
+    --x ${TF_X:-0} --y ${TF_Y:-0} --z 0 --roll 0 --pitch 0 --yaw 0 \
     --frame-id map --child-frame-id odom > /tmp/fyp_static_tf30.log 2>&1 &
+sleep 2
+# OdometryPublisher (new drive) emits odom -> fyp_robot/base_footprint, while
+# nav2 + the depth pipeline anchor on bare base_link. Identity static joins
+# them so map->odom->fyp_robot/base_footprint->base_link is one tree.
+setsid nohup /opt/ros/lyrical/lib/tf2_ros/static_transform_publisher \
+    --x 0 --y 0 --z 0 --roll 0 --pitch 0 --yaw 0 \
+    --frame-id fyp_robot/base_footprint --child-frame-id base_link \
+    > /tmp/fyp_footprint_tf.log 2>&1 &
 sleep 2
 
 echo "== map server (BEFORE nav2 so costmaps init with the map) =="

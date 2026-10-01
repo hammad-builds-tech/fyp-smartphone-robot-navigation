@@ -130,7 +130,25 @@ class NavDriver(Node):
                 fh.write('%.4f %.4f\n' % (ps.pose.position.x, ps.pose.position.y))
         print('plan dumped: %s (%d poses)' % (path, len(poses)))
 
-    def navigate(self, goal, monitor_every=20.0, give_up=600.0):
+    def navigate(self, goal, monitor_every=20.0, give_up=1500.0):
+        # Pre-validate: a leg whose global plan is absurdly bent (>1.8x straight)
+        # or impossible means the goal/geometry cannot support honest navigation
+        # (e.g. goal beyond an unknown-space boundary in this reconstruction).
+        rp = self.robot_pose()
+        self.wait_plan_client()
+        poses, plen = self.plan_from((rp[0], rp[1], rp[2]), goal)
+        straight = math.hypot(goal[0] - rp[0], goal[1] - rp[1])
+        if poses is None:
+            print('PLAN_REFUSED: no global path from (%.2f, %.2f) to (%.2f, %.2f)'
+                  % (rp[0], rp[1], goal[0], goal[1]))
+            return False
+        ratio = plen / max(straight, 1e-6)
+        if ratio > 1.8:
+            print('PLAN_REFUSED: plan %.2f m vs straight %.2f m (ratio %.2f > 1.8)'
+                  % (plen, straight, ratio))
+            return False
+        print('PLAN_OK: %.2f m vs straight %.2f m (ratio %.2f) - committing'
+              % (plen, straight, ratio))
         g = NavigateToPose.Goal()
         g.pose.header.frame_id = 'map'
         g.pose.header.stamp = self.get_clock().now().to_msg()
