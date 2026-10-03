@@ -71,13 +71,9 @@ frames_*.pdf
 .gradle/
 local.properties
 
-# MiDaS upstream sources and weights. The Android app under
-# MiDaS/mobile/android IS tracked (it is our deliverable).
-MiDaS/*
-!MiDaS/mobile/
-MiDaS/mobile/*
-!MiDaS/mobile/android/
-MiDaS/mobile/android/MainActivity_backup.kt
+# MiDaS upstream sources and weights (third-party dependency; see README setup).
+# The 230MB MiDaS/mobile/android tree is upstream TFLite demo code, not our app.
+MiDaS/
 
 # Nav2 source
 nav2_src/
@@ -93,3 +89,20 @@ datasets/
 android_model/
 images/
 fuse_midas_colmap.py
+
+# Freebuff app-internal state
+.freebuff/
+
+# Downloaded model weights / COLMAP vocab tree (see README setup)
+checkpoints/
+vocab_tree.bin
+
+# Generated reconstruction datasets & archived test data (regenerable via
+# scripts/fyp30_run_pipeline.sh <video>)
+realroom/runs/
+realroom/archive_*/
+*.ply
+
+# Live-bridge runtime uploads/outputs
+backend/uploads/
+backend/depth/output/

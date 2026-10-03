@@ -1,6 +1,0 @@
-map 109x137 @ 0.05 m, occupied 982, carved free 8423
-components: 51 total, kept 4, dropped 47 specks (60 cells)
-obstacle rects: 922 exact -> 176 after merge
-room extent: x [-4.82,0.73] y [0.71,7.66] (5.55 x 6.95 m)
-interior obstacles rendered: 95
-WORLD WRITTEN: /home/hammad/FYP/realroom/runs/capture60/realroom_capture60_world.sdf (XML valid)

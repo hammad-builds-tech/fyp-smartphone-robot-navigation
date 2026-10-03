@@ -1,9 +1,0 @@
-cloud points: 167616
-camera centers: 9
-auto up-axis: x (extents: [12.12 20.77 16.  ])
-rotated cloud: up-axis x -> z
-Stage-4 filtering: voxel+SOR 167616 -> 39956; RANSAC floor removed 0 -> 39956
-points in obstacle band z=[0.15,1.2]: 6385
-map: 109x137 cells @ 0.05 m  origin=(-4.77,0.76)
-carved rays: 39080
-MAP WRITTEN: /home/hammad/FYP/realroom/runs/capture60/realroom_capture60.pgm/.yaml  occupied=982 free=5528 unknown=8423
