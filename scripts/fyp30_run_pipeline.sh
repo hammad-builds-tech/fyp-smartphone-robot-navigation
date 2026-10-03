@@ -17,20 +17,28 @@ set -o pipefail
 DS=$(realpath "$1") || { echo "usage: $0 <dataset_dir|video.mp4>"; exit 1; }
 [ -d "$DS" ] || { echo "dataset dir not created"; exit 1; }
 
-FYP_PY=/home/hammad/miniconda3/envs/fyp/bin/python
-cd /home/hammad/FYP
+FYP_PY=${FYP_PY:-$HOME/miniconda3/envs/fyp/bin/python}
+FYP_ROOT=${FYP_ROOT:-$HOME/FYP}
+FPS=${FYP_FPS:-2}                  # extraction fps (any input length supported)
+MAX_FRAMES=${FYP_MAX_FRAMES:-140}  # cap on frames fed to MiDaS+COLMAP
+[ -x "$FYP_PY" ] || { echo "FAIL: python interpreter not found: $FYP_PY (set FYP_PY)"; exit 2; }
+cd "$FYP_ROOT"
 T0=$(date +%s)
 step() { echo "== [$(( $(date +%s) - T0 ))s] $*"; }
 
 # ---- 0. input: video file -> frames, or existing frame dir -----------------
-if [ -f "$DS" ] && [[ "$DS" == *.mp4 || "$DS" == *.mov || "$DS" == *.avi ]]; then
+if [ -f "$DS" ] && [[ "${DS,,}" =~ \\.(mp4|mov|avi|mkv|webm|m4v|mpg|mpeg|ts|wmv|flv)$ ]]; then
     VID="$DS"
+    # fail fast on unreadable/corrupt video files
+    ffprobe -v error -select_streams v:0 -show_entries format=duration \
+        -of csv=p=0 "$VID" > /dev/null 2>&1 \
+        || { echo "FAIL: unreadable or corrupt video: $VID"; exit 2; }
     SAFE=$(basename "$VID" | sed 's/\.[^.]*$//' | tr -c 'a-zA-Z0-9_' '_' | sed 's/_*$//')
-    DS=/home/hammad/FYP/realroom/runs/$SAFE
+    DS="$FYP_ROOT/realroom/runs/$SAFE"
     mkdir -p "$DS/img"
     if [ -z "$(ls -A "$DS/img" 2>/dev/null)" ]; then
-        step "extracting frames from $VID (2 fps)"
-        ffmpeg -hide_banner -loglevel error -y -i "$VID" -vf fps=2 "$DS/img/frame_%04d.jpg" \
+        step "extracting frames from $VID (${FPS} fps)"
+        ffmpeg -hide_banner -loglevel error -y -i "$VID" -vf fps=$FPS "$DS/img/frame_%04d.jpg" \
             || { echo "FAIL: ffmpeg frame extraction"; exit 2; }
     fi
 elif [ -d "$DS" ]; then
@@ -42,9 +50,23 @@ NIMG=$(ls "$DS"/img/*.jpg 2>/dev/null | wc -l)
 [ "$NIMG" -ge 5 ] || { echo "FAIL: only $NIMG frames in $DS/img (need >= 5)"; exit 2; }
 step "dataset $DS ($SAFE), $NIMG frames"
 
+# ---- 0b. useful-frame selection: drop blurred / near-duplicate frames and
+# cap the set, so a 2-minute capture costs the same bounded COLMAP/MiDaS work
+# as a 30-second one (no duplicate processing of redundant frames) -----------
+if [ ! -f "$DS/.frames_selected" ]; then
+    step "useful-frame selection (blur + dedup, cap $MAX_FRAMES)"
+    "$FYP_PY" scripts/fyp30_select_frames.py --img-dir "$DS/img" \
+        --max-frames "$MAX_FRAMES" > "$DS/selection.log" 2>&1 \
+        || { tail -5 "$DS/selection.log"; echo "FAIL: frame selection"; exit 2; }
+    tail -2 "$DS/selection.log"
+    NIMG=$(ls "$DS"/img/*.jpg 2>/dev/null | wc -l)
+    [ "$NIMG" -ge 5 ] || { echo "FAIL: only $NIMG usable frames after selection (need >= 5)"; exit 2; }
+    touch "$DS/.frames_selected"
+fi
+
 # ---- 1. MiDaS depth (report Stage 2) ---------------------------------------
 if [ -z "$(ls "$DS"/depth_midas/*.pfm 2>/dev/null)" ]; then
-    step "MiDaS batch depth ($NIMG frames, CPU)"
+    step "MiDaS batch depth ($NIMG frames; CUDA if available, else CPU)"
     "$FYP_PY" scripts/fyp30_midas_batch.py --img-dir "$DS/img" --out-dir "$DS/depth_midas" \
         || { echo "FAIL: MiDaS batch"; exit 2; }
 fi
@@ -116,6 +138,18 @@ if [ ! -f "$WORLD" ]; then
     grep -E "kept|WORLD" "$DS/world.log" | tail -2
 fi
 
+# ---- 5b. bake world obstacle boxes into the map (Nav2 must see the SAME
+# geometry Gazebo will simulate; the raw carved map has ray-visibility gaps) --
+BAKED_YAML="$DS/${SAFE}_baked.yaml"
+if [ ! -f "$BAKED_YAML" ]; then
+    step "baking world obstacle boxes into occupancy map"
+    "$FYP_PY" scripts/fyp30_bake_world_boxes.py --world "$WORLD" \
+        --map-yaml "$MAPBASE.yaml" --out-base "$DS/${SAFE}_baked" \
+        > "$DS/bake.log" 2>&1 \
+        || { tail -5 "$DS/bake.log"; echo "FAIL: map baking (world/map mismatch?)"; exit 2; }
+    grep -E "^baked|^wrote" "$DS/bake.log"
+fi
+
 # ---- 6. automatic spawn + goal (no manual coordinates) ----------------------
 step "selecting spawn/goal from captured free space"
 "$FYP_PY" scripts/fyp30_pick_goal.py "$MAPBASE.yaml" "$DS/colmap/sparse/txt/images.txt" \
@@ -130,7 +164,7 @@ GOAL_Y=$(grep -oP 'GOAL_Y=\K-?[0-9.]+' "$DS/pick_goal.log")
 [ -n "$SPAWN_X" ] && [ -n "$GOAL_Y" ] || { echo "FAIL: could not parse spawn/goal"; exit 2; }
 
 cat > "$DS/nav_targets.env" <<EOF
-FYP_MAP=$MAPBASE.yaml
+FYP_MAP=$BAKED_YAML
 FYP_WORLD=$WORLD
 FYP_WORLD_NAME=${SAFE}
 SPAWN_X=$SPAWN_X

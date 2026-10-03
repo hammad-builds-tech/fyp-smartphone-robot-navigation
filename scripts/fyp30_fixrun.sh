@@ -1,12 +1,22 @@
 #!/bin/bash
 # Supervisor: clean bringup -> evidence instruments -> sim-time traction gate
 # -> 3-leg multi-goal demo. Run via setsid nohup; poll the log.
-# Uses ONLY the capture_fresh reconstruction via nav_targets.env.
+# Uses ONLY the dataset reconstruction via nav_targets.env (any dataset).
+DS="${1:-}"
+if [ -z "$DS" ] || [ ! -d "$DS" ]; then
+    echo "usage: fyp30_fixrun.sh <dataset_dir>   (dir containing nav_targets.env)"
+    exit 1
+fi
+DS=$(realpath "$DS")
+if [ ! -r "$DS/nav_targets.env" ]; then
+    echo "FAIL: $DS/nav_targets.env missing - run scripts/fyp30_run_pipeline.sh <video> first"
+    exit 1
+fi
 set -x
 # set -a auto-exports every var sourced from nav_targets.env so the child
 # bring-up and nav2-restart scripts inherit the CURRENT reconstruction.
 set -a
-source "$HOME/FYP/realroom/capture_fresh/nav_targets.env"
+source "$DS/nav_targets.env"
 set +a
 export ROS_DOMAIN_ID=0
 export GZ_IP=127.0.0.1
@@ -57,9 +67,9 @@ echo "teleport rc=$? -> $(head -1 /tmp/tp_spawn.log)"
 sleep 3
 
 echo "== [5/6] 3-leg multi-goal demo =="
-cd "$HOME/FYP/realroom/capture_fresh"
+cd "$DS"
 timeout 5400 /usr/bin/python3 -u "$HOME/FYP/scripts/fyp30_multi_goal_demo.py" \
-    "$HOME/FYP/realroom/capture_fresh" 3 > multi_demo.log 2>&1
+    "$DS" 3 > multi_demo.log 2>&1
 echo "demo rc=$?"
 
 echo "== [6/6] done =="

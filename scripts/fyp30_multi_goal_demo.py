@@ -41,8 +41,13 @@ def wait_odom_flow(min_msgs=5, budget=60.0):
         rclpy.spin_once(_pf, timeout_sec=0.5)
     return _pf_count[0]
 
-DS = sys.argv[1] if len(sys.argv) > 1 else "/home/hammad/FYP/realroom/capture_fresh"
+DS = sys.argv[1] if len(sys.argv) > 1 else ""
 N_LEGS = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+if not DS or not os.path.isdir(DS):
+    sys.exit("usage: fyp30_multi_goal_demo.py <dataset_dir> [n_legs]")
+DS = os.path.realpath(DS)
+DRIVER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "fyp30_nav_driver.py")
 
 # --- targets from the dataset's own auto-selection ---------------------------
 SPAWN = GOAL0 = None
@@ -57,10 +62,19 @@ for line in open(f"{DS}/nav_targets.env"):
         GOAL0[1] = float(line.split("=")[1])
 assert SPAWN[1] is not None and GOAL0[1] is not None
 
-MAPY = f"{DS}/capture_fresh_baked.yaml"
-if not os.path.exists(MAPY):
+# the pipeline records the baked (world-consistent) map in nav_targets.env
+MAPY = None
+_nt = f"{DS}/nav_targets.env"
+if os.path.exists(_nt):
+    for line in open(_nt):
+        if line.startswith("FYP_MAP="):
+            MAPY = line.split("=", 1)[1].strip()
+            if MAPY and not os.path.isabs(MAPY):
+                MAPY = os.path.join(DS, MAPY)
+            break
+if not MAPY or not os.path.exists(MAPY):
     MAPY = f"{DS}/realroom_{os.path.basename(DS)}.yaml"
-assert os.path.exists(MAPY), "dataset map yaml not found"
+assert os.path.exists(MAPY), "dataset map yaml not found (run fyp30_run_pipeline.sh first)"
 print(f"demo oracle map: {MAPY}")
 
 meta = yaml.safe_load(open(MAPY))
@@ -184,7 +198,7 @@ _home_env = dict(os.environ)
 _home_env["FYP_TRAJ_LOG"] = f"{DS}/traj_home.log"
 open(f"{DS}/traj_home.log", "w").close()
 r = subprocess.run(
-    ["/usr/bin/python3", "-u", "/home/hammad/FYP/scripts/fyp30_nav_driver.py",
+    ["/usr/bin/python3", "-u", DRIVER,
      "navigate", f"{SPAWN[0]:.2f}", f"{SPAWN[1]:.2f}"],        env=_home_env, capture_output=True, text=True, timeout=1600)
 print("return-to-spawn:", "REACHED" if r.returncode == 0 else
       ("/FAILED or already there" if "REACHED" not in r.stdout else "?"))
@@ -220,7 +234,7 @@ for leg in range(1, N_LEGS + 1):
     env = dict(os.environ)
     env["FYP_TRAJ_LOG"] = traj_leg
     r = subprocess.run(
-        ["/usr/bin/python3", "-u", "/home/hammad/FYP/scripts/fyp30_nav_driver.py",
+        ["/usr/bin/python3", "-u", DRIVER,
          "navigate", f"{goal[0]:.2f}", f"{goal[1]:.2f}"],
         env=env, capture_output=True, text=True, timeout=1600)
     tail = [l for l in r.stdout.splitlines() if "NAV_RESULT" in l or "REACHED" in l

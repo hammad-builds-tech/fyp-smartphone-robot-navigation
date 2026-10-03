@@ -1,105 +1,125 @@
 #!/usr/bin/env python3
-"""Bake the world SDF's real obstacle boxes into the map pgm.
+"""Bake the world SDF's real obstacle boxes into the occupancy map pgm.
 
-The map pgm is a sparse sketch of the reconstruction (2,453 occupied px; the
-comp-65 wall band has gaps at y>=16.6), while the world SDF built from the
-same reconstruction has solid boxes there (x 2.33-3.28, y 15.65-17.21). The
-robot planned through a map gap and physically wedged on the real boxes.
+The raw occupancy map is a sparse sketch of the reconstruction (lethal cells
+exist only where capture rays stopped), while the Gazebo world built from the
+same reconstruction renders solid obstacle boxes. Nav2 can therefore plan
+through map gaps that the physical world blocks. This script rasterizes EVERY
+obstacle_* and wall_* box from the world SDF onto the map grid (a cell is
+lethal if its center lies inside the box grown by --grow), preserving all
+existing lethal cells, and writes <out-base>.pgm/.yaml. Pure reconstruction
+data - no synthetic geometry is added.
 
-This script rasterizes EVERY obstacle_* and wall_* box from the world SDF
-onto the pgm grid (cell center inside grown box -> lethal), preserving the
-existing SLAM lethal, and writes capture_fresh_baked.pgm/.yaml. Pure
-reconstruction data - no synthetic geometry is added.
+pgm row convention (verified live against the running map_server): row 0 =
+TOP = max y.
 
-pgm row convention VERIFIED live: row 0 = TOP = max y (matches the running
-map_server's costmap output pixel-for-pixel).
+Usage:
+  python3 fyp30_bake_world_boxes.py --world WORLD.sdf --map-yaml MAP.yaml \
+      [--out-base PREFIX] [--grow 0.25]
+
+--out-base defaults to <map-yaml-dir>/<map-yaml-basename>_baked.
+Exit codes: 0 ok, 1 bad inputs (missing/empty world boxes, unreadable map).
 """
-import re
+import argparse
 import math
+import os
+import re
+import sys
 
-import numpy as np
 import cv2
+import numpy as np
 
-BASE = "/home/hammad/FYP/realroom/capture_fresh"
-WORLD = f"{BASE}/realroom_capture_fresh_world.sdf"
-MAP_YAML = f"{BASE}/realroom_capture_fresh.yaml"
-OUT_PGM = f"{BASE}/capture_fresh_baked.pgm"
-OUT_YAML = f"{BASE}/capture_fresh_baked.yaml"
 
-GROW = 0.25  # half robot footprint: fringe-hugging can no longer clip corners
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    ap.add_argument("--world", required=True,
+                    help="Gazebo world SDF generated from the reconstruction")
+    ap.add_argument("--map-yaml", required=True,
+                    help="occupancy map .yaml (matching .pgm must sit beside it)")
+    ap.add_argument("--out-base",
+                    help="output base path; default <map-yaml>_baked")
+    ap.add_argument("--grow", type=float, default=0.25,
+                    help="inflation around each box in metres "
+                         "(default 0.25 = half robot footprint)")
+    args = ap.parse_args()
 
-ytxt = open(MAP_YAML).read()
-res = float(re.search(r"resolution:\s*([\d.]+)", ytxt).group(1))
-ox, oy = [float(v) for v in
-          re.search(r"origin:\s*\[([^\]]+)\]", ytxt).group(1).split(",")[:2]]
-img = cv2.imread(f"{BASE}/realroom_capture_fresh.pgm", cv2.IMREAD_GRAYSCALE)
-H, W = img.shape
-grid = img.copy()
+    out_base = args.out_base or f"{args.map_yaml[:-5]}_baked"
+    if not os.path.isfile(args.world):
+        sys.exit(f"FAIL: world SDF not found: {args.world}")
+    if not os.path.isfile(args.map_yaml):
+        sys.exit(f"FAIL: map yaml not found: {args.map_yaml}")
 
-sdf = open(WORLD).read()
-blocks = re.findall(
-    r'<model name="((?:obstacle|wall)_\w+)">.*?<pose>([^<]+)</pose>.*?'
-    r'<size>([^<]+)</size>.*?</model>', sdf, re.S)
-boxes = []
-for name, pose, size in blocks:
-    p = [float(v) for v in pose.split()]
-    s = [float(v) for v in size.split()]
-    if len(p) < 6 or len(s) < 3:
-        continue
-    boxes.append((name, p[0], p[1], p[5], s[0], s[1]))
-print(f"map {W}x{H} res {res} origin ({ox},{oy}); parsed {len(boxes)} boxes")
+    ytxt = open(args.map_yaml).read()
+    m = re.search(r"resolution:\s*([\d.]+)", ytxt)
+    o = re.search(r"origin:\s*\[([^\]]+)\]", ytxt)
+    if not m or not o:
+        sys.exit("FAIL: map yaml missing resolution/origin")
+    res = float(m.group(1))
+    ox, oy = [float(v) for v in o.group(1).split(",")[:2]]
 
-def to_row(wy):
-    """world y -> image row, row0=TOP convention."""
-    return H - 1 - int(round((wy - oy) / res))
+    pgm_path = args.map_yaml.replace(".yaml", ".pgm")
+    img = cv2.imread(pgm_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        sys.exit(f"FAIL: cannot read map pgm: {pgm_path}")
+    H, W = img.shape
+    grid = img.copy()
 
-lethal = 0
-for name, cx, cy, yaw, sx, sy in boxes:
-    hs, hl = sx / 2.0 + GROW, sy / 2.0 + GROW
-    if sx < sy:
-        hs, hl = hl, hs
-        yaw += math.pi / 2.0
-    c, sn = math.cos(yaw), math.sin(yaw)
-    rx = hs * abs(c) + hl * abs(sn)
-    ry = hs * abs(sn) + hl * abs(c)
-    gx0 = max(0, int((cx - rx - ox) / res))
-    gx1 = min(W - 1, int((cx + rx - ox) / res) + 1)
-    r0 = max(0, to_row(cy + ry))
-    r1 = min(H - 1, to_row(cy - ry))
-    for r in range(r0, r1 + 1):
-        wy = oy + (H - 1 - r) * res
-        dy = wy - cy
-        for gx in range(gx0, gx1 + 1):
-            wx = ox + gx * res
-            dx = wx - cx
-            u = c * dx + sn * dy
-            v = -sn * dx + c * dy
-            if abs(u) <= hs and abs(v) <= hl and grid[r, gx] > 64:
-                grid[r, gx] = 0
-                lethal += 1
-print(f"baked {lethal} new lethal cells (grow {GROW} m, {len(boxes)} boxes)")
+    sdf = open(args.world).read()
+    blocks = re.findall(
+        r'<model name="((?:obstacle|wall)_\w+)">.*?<pose>([^<]+)</pose>.*?'
+        r'<size>([^<]+)</size>.*?</model>', sdf, re.S)
+    if not blocks:
+        sys.exit("FAIL: no obstacle_*/wall_* boxes parsed from the world SDF")
 
-cv2.imwrite(OUT_PGM, grid)
-open(OUT_YAML, "w").write(
-    f"image: {OUT_PGM}\nresolution: {res}\norigin: [{ox}, {oy}, 0.0]\n"
-    f"negate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.25\nmode: trinary\n")
-print(f"wrote {OUT_PGM} + {OUT_YAML}")
+    boxes = []
+    for name, pose, size in blocks:
+        p = [float(v) for v in pose.split()]
+        s = [float(v) for v in size.split()]
+        if len(p) < 6 or len(s) < 3:
+            continue
+        boxes.append((name, p[0], p[1], p[5], s[0], s[1]))
+    if not boxes:
+        sys.exit("FAIL: world SDF boxes had malformed pose/size")
+    print(f"map {W}x{H} res {res} origin ({ox},{oy}); parsed {len(boxes)} boxes")
 
-# Verification: same ASCII window that exposed the mismatch + key cells free
-def ascii_window(grid_, label):
-    print(f"--- {label}: x[2.3,3.6] y[15.0,17.6] ---")
-    for wy in np.arange(17.5, 14.9, -0.25):
-        row = ""
-        for wx in np.arange(2.3, 3.65, 0.05):
-            gx = int(round((wx - ox) / res))
-            r = to_row(wy)
-            v = grid_[r, gx]
-            row += "#" if v <= 64 else ("." if v >= 191 else ":")
-        print(f"y={wy:5.2f} {row}")
+    def to_row(wy):
+        """world y -> image row, row0=TOP convention."""
+        return H - 1 - int(round((wy - oy) / res))
 
-ascii_window(img, "ORIGINAL")
-ascii_window(grid, "BAKED")
-for label, wx, wy in [("spawn", 8.01, 13.73), ("leg1 goal", 0.11, 17.98)]:
-    gx = int(round((wx - ox) / res))
-    v = grid[to_row(wy), gx]
-    print(f"{label} ({wx},{wy}): value {v} -> {'FREE' if v > 64 else 'LETHAL!'}")
+    lethal = 0
+    for name, cx, cy, yaw, sx, sy in boxes:
+        hs, hl = sx / 2.0 + args.grow, sy / 2.0 + args.grow
+        if sx < sy:
+            hs, hl = hl, hs
+            yaw += math.pi / 2.0
+        c, sn = math.cos(yaw), math.sin(yaw)
+        rx = hs * abs(c) + hl * abs(sn)
+        ry = hs * abs(sn) + hl * abs(c)
+        gx0 = max(0, int((cx - rx - ox) / res))
+        gx1 = min(W - 1, int((cx + rx - ox) / res) + 1)
+        r0 = max(0, to_row(cy + ry))
+        r1 = min(H - 1, to_row(cy - ry))
+        for r in range(r0, r1 + 1):
+            wy = oy + (H - 1 - r) * res
+            dy = wy - cy
+            for gx in range(gx0, gx1 + 1):
+                wx = ox + gx * res
+                dx = wx - cx
+                u = c * dx + sn * dy
+                v = -sn * dx + c * dy
+                if abs(u) <= hs and abs(v) <= hl and grid[r, gx] > 64:
+                    grid[r, gx] = 0
+                    lethal += 1
+    print(f"baked {lethal} new lethal cells (grow {args.grow} m, {len(boxes)} boxes)")
+
+    out_pgm = f"{out_base}.pgm"
+    out_yaml = f"{out_base}.yaml"
+    cv2.imwrite(out_pgm, grid)
+    open(out_yaml, "w").write(
+        f"image: {out_pgm}\nresolution: {res}\norigin: [{ox}, {oy}, 0.0]\n"
+        f"negate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.25\nmode: trinary\n")
+    print(f"wrote {out_pgm} + {out_yaml}")
+
+
+if __name__ == "__main__":
+    main()
