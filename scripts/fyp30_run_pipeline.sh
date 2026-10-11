@@ -15,7 +15,7 @@
 # =============================================================================
 set -o pipefail
 DS=$(realpath "$1") || { echo "usage: $0 <dataset_dir|video.mp4>"; exit 1; }
-[ -d "$DS" ] || { echo "dataset dir not created"; exit 1; }
+[ -d "$DS" ] || [ -f "$DS" ] || { echo "dataset dir not created"; exit 1; }
 
 FYP_PY=${FYP_PY:-$HOME/miniconda3/envs/fyp/bin/python}
 FYP_ROOT=${FYP_ROOT:-$HOME/FYP}
@@ -27,7 +27,8 @@ T0=$(date +%s)
 step() { echo "== [$(( $(date +%s) - T0 ))s] $*"; }
 
 # ---- 0. input: video file -> frames, or existing frame dir -----------------
-if [ -f "$DS" ] && [[ "${DS,,}" =~ \\.(mp4|mov|avi|mkv|webm|m4v|mpg|mpeg|ts|wmv|flv)$ ]]; then
+VID_RE='\.(mp4|mov|avi|mkv|webm|m4v|mpg|mpeg|ts|wmv|flv)$'
+if [ -f "$DS" ] && [[ "${DS,,}" =~ $VID_RE ]]; then
     VID="$DS"
     # fail fast on unreadable/corrupt video files
     ffprobe -v error -select_streams v:0 -show_entries format=duration \

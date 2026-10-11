@@ -66,10 +66,10 @@ timeout 15 gz service -s /world/$FYP_WORLD_NAME/set_pose \
 echo "teleport rc=$? -> $(head -1 /tmp/tp_spawn.log)"
 sleep 3
 
-echo "== [5/6] 3-leg multi-goal demo =="
+echo "== [5/6] multi-goal avoidance demo (${FYP_N_LEGS:-3} legs) =="
 cd "$DS"
 timeout 5400 /usr/bin/python3 -u "$HOME/FYP/scripts/fyp30_multi_goal_demo.py" \
-    "$DS" 3 > multi_demo.log 2>&1
+    "$DS" "${FYP_N_LEGS:-3}" > multi_demo.log 2>&1
 echo "demo rc=$?"
 
 echo "== [6/6] done =="

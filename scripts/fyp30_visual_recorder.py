@@ -33,6 +33,7 @@ class Rec(Node):
         self.pose = None
         self.frame_count = 0
         self.last_frame_t = 0.0
+        self.last_frame_bytes = None
         qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
                          reliability=ReliabilityPolicy.RELIABLE)
         self.create_subscription(Image, TOPIC, self.on_img, qos)
@@ -46,11 +47,18 @@ class Rec(Node):
         now = time.time()
         if now - self.last_frame_t < 1.5:
             return
-        self.last_frame_t = now
         try:
             img = self.bridge.imgmsg_to_cv2(m, 'rgb8')
         except Exception:
             return
+        # skip saving if the frame is byte-identical to the previous one:
+        # a stalled/clear-color sensor would otherwise duplicate forever and
+        # "freeze" the evidence video even while the world runs fine.
+        key = img.tobytes()
+        if key == self.last_frame_bytes:
+            return
+        self.last_frame_bytes = key
+        self.last_frame_t = now
         self.frame_count += 1
         cv2.imwrite(f"{OUT}/frames/frame_{self.frame_count:03d}.png",
                     cv2.cvtColor(img, cv2.COLOR_RGB2BGR))

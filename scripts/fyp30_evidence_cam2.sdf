@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <!-- Close-up evidence camera: reference-image style viewpoint.
+       Posed in SDF (NOT via set_pose) because rendering sensors keep the
+       pose they were spawned with. Sits at chest height in the SW corner of
+       the obstacle field, looking level-ish across the tour region toward
+       the spawn area (-4.3,16.6 -> -2.7,7.8 legs). -->
+  <model name="evidence_cam2">
+    <static>true</static>
+    <pose>-8.0 3.5 1.9 0 -0.146 0.825</pose>
+    <link name="link">
+      <sensor name="camera2" type="camera">
+        <pose>0 0 0 0 0 0</pose>
+        <camera>
+          <horizontal_fov>1.3</horizontal_fov>
+          <image>
+            <width>1280</width>
+            <height>720</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>100</far>
+          </clip>
+        </camera>
+        <always_on>true</always_on>
+        <update_rate>15</update_rate>
+        <visualize>false</visualize>
+        <topic>/evidence_cam2/image</topic>
+      </sensor>
+    </link>
+  </model>
+</sdf>

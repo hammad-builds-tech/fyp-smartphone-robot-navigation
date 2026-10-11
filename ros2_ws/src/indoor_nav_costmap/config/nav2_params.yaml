@@ -1,3 +1,28 @@
+# ============================================================================
+# REAL-ROBOT SUITABILITY NOTE (FYP camera-only navigation)
+# ----------------------------------------------------------------------------
+# Final command-line speed limits (this build, verified in the
+# Gazebo multi-obstacle demo, see ~/FYP/scripts/fyp30_demo.sh):
+#   Linear cruise (capped by DWB + velocity_smoother): 0.85 m/s forward
+#     (min_velocity -0.25 m/s reverse, used only for BackUp recovery)
+#   Angular (in-place / while moving):                 1.80 rad/s
+#   Linear accel / decel:                             +2.5 / -3.0 m/s^2
+#   Angular accel / decel:                            +4.0 / -4.0 rad/s^2
+#   Safety net (collision_monitor PolygonStop):[-0.20..0.45] x +/-0.30 m box,STOP|
+#   Costmap inflation radius: 0.45 m (= PolygonStop + margin, never reduced)
+# These values are physically reasonable for a ~0.7 x 0.5 m indoor diff-drive
+# chassis with 76-mm wheels (well within a TurtleBot-like drive train).
+#
+# ITEMS NEEDING CALIBRATION ON THE PHYSICAL ROBOT (phones+MiDaS perception):
+#   1. Wheel radius + track width in fyp_robot.sdf  (odometry scale factor)
+#   2. Wheel friction mu (grip floor) and caster drag (real caster vs sphere)
+#   3. VelocityControl plugin PID/cmd_vel timeout at the motor-driver level
+#   4. acc_lim_* / decel_* — reduce to motor torque & CG-safe values
+#   5. PolygonStop box — remeasure from the real chassis' bumper profile
+#   6. MI-DAS depth scale: phone-camera intrinsics (fx/fy) + MiDaS depth units
+#      feed fyp_realroom30_up.sh 's depth_pipeline; recalibrate per phone.
+#   7. TF timing (transform_tolerance) — real drivers publish slower than sim
+# ============================================================================
 amcl:
   ros__parameters:
     use_sim_time: true
@@ -57,19 +82,26 @@ controller_server:
       transform_tolerance: 1.0
       # Velocities match the fyp_robot's Gazebo differential drive limits.
       min_vel_x: 0.0
-      # raised from 0.15 for clearly visible motion (user requirement)
-      max_vel_x: 0.22
-      min_vel_theta: -0.5
-      max_vel_theta: 0.5
-      acc_lim_x: 1.0
-      decel_lim_x: -1.0
-      acc_lim_theta: 1.0
-      decel_lim_theta: -1.0
-      # raised from 0.15 for clearly visible motion (user requirement)
-      max_speed_xy: 0.22
+      # 0.85 m/s controlled-but-lively cruise (Camera-only FYP demo).
+      # Safety clearance is NOT traded for speed: slowdown near obstacles
+      # comes from BaseObstacle scoring + the collision-monitor stop polygon
+      # as the safety net (0.85 is ~31% above the old 0.65 cruise while
+      # inflation 0.45 and PolygonStop stay UNCHANGED).
+      max_vel_x: 0.85
+      min_vel_theta: -1.8
+      max_vel_theta: 1.8
+      acc_lim_x: 2.5
+      decel_lim_x: -3.0
+      acc_lim_theta: 4.0
+      decel_lim_theta: -4.0
+      # 0.85 m/s cruise matches DWB max above
+      max_speed_xy: 0.85
       min_speed_xy: 0.0
-      min_speed_theta: 0.2
-      # shorter DWB horizon so 0.35 m/s sampled arcs stay legal in tight gaps
+      min_speed_theta: 0.25
+      # KEEP the 1.2 s horizon from the 0.55 build: it was deliberately tuned
+      # so sampled arcs stay legal in the tight gaps of this reconstructed map
+      # (1.6 s arcs swing wide and veto everything -> robot stalls). At 0.85
+      # m/s a 1.2 s arc still covers 0.78 m — enough to swerve in time.
       sim_time: 1.2
       # Report-aligned critics (obstacle + inflation from the depth-derived
       # occupancy/costmap representation).
@@ -77,7 +109,7 @@ controller_server:
       # it vetoed every trajectory (reset distance 0.05 m is unreachable in a
       # tight detour) => zero cmd_vel for minutes => error 105 aborts.
       critics: ["RotateToGoal", "BaseObstacle", "PathAlign", "GoalAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.02
+      BaseObstacle.scale: 0.10
       PathAlign.scale: 32.0
       PathAlign.forward_point_distance: 0.1
       GoalAlign.scale: 24.0
@@ -128,8 +160,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.22, 0.0, 0.5]
-    min_velocity: [-0.15, 0.0, -0.5]
+    max_velocity: [0.85, 0.0, 1.8]
+    min_velocity: [-0.25, 0.0, -1.8]
+    max_accel: [2.5, 0.0, 4.0]
+    min_decel: [-3.0, 0.0, -4.0]
 
 collision_monitor:
   ros__parameters:

@@ -2,7 +2,11 @@
 <sdf version="1.6">
   <model name="evidence_cam">
     <static>true</static>
-    <pose>0.1 9.0 14.0 0 -1.15 0</pose>
+    <!-- Overview camera: near-vertical view of the WHOLE room from 12.5 m.
+         The room interior spans x -9.4..8.6, y -3.0..17.7 (floor center
+         -0.43,7.37), so a cam at (-0.4,-0.5,12.5) pitched -83 deg south-west
+         sees the full obstacle field + walls in one frame. -->
+    <pose>-0.4 -0.5 12.5 0 -1.35 -0.35</pose>
     <link name="link">
       <sensor name="camera" type="camera">
         <pose>0 0 0 0 0 0</pose>
